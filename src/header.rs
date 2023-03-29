@@ -1,6 +1,5 @@
-use crate::processor::{
-    dec_f32, dec_u16, intel_f32, intel_u16, sgi_mips_f32, sgi_mips_u16, ProcessorType,
-};
+use crate::parse::{C3dParseError, read_c3d, parse_basic_info, split_c3d};
+use crate::processor::{ProcessorType, bytes_to_u16, bytes_to_f32};
 
 pub struct Header {
     parameter_start_block: u8,
@@ -22,86 +21,50 @@ pub struct Header {
     event_labels: [[char; 4]; 18],
 }
 
-pub fn parse_header(header: &[u8; 512], processor_type: &ProcessorType) -> Header {
+pub fn read_header_from_file(file: &str) -> Result<Header, C3dParseError> {
+    let contents = read_c3d(file)?;
+
+    let (parameter_start_block_index, data_start_block_index, processor_type) =
+        parse_basic_info(&contents)?;
+
+    let (header_blocks, _, _) = split_c3d(
+        &contents,
+        parameter_start_block_index,
+        data_start_block_index,
+    )?;
+
+    parse_header(header_blocks, &processor_type)
+
+}
+
+pub fn parse_header(header: &[u8], processor_type: &ProcessorType) -> Result<Header, C3dParseError> {
+
+    if header.len() < 512 {
+        return Err(C3dParseError::InsufficientBlocks(format!("Header block is missing")));
+    }
+
     let parameter_start_block = header[0];
     let data_format = header[1];
 
-    let num_3d_points_per_frame = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[2..4]),
-        ProcessorType::Dec => dec_u16(&header[2..4]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[2..4]),
-    };
-
-    let num_analog_samples_per_frame = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[4..6]),
-        ProcessorType::Dec => dec_u16(&header[4..6]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[4..6]),
-    };
-
-    let first_frame = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[6..8]),
-        ProcessorType::Dec => dec_u16(&header[6..8]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[6..8]),
-    };
-
-    let last_frame = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[8..10]),
-        ProcessorType::Dec => dec_u16(&header[8..10]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[8..10]),
-    };
-
-    let max_interpolation_gap = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[10..12]),
-        ProcessorType::Dec => dec_u16(&header[10..12]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[10..12]),
-    };
-
-    let scale_factor = match processor_type {
-        ProcessorType::Intel => intel_f32(&header[12..16]),
-        ProcessorType::Dec => dec_f32(&header[12..16]),
-        ProcessorType::SgiMips => sgi_mips_f32(&header[12..16]),
-    };
-
-    let data_start_block = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[16..18]),
-        ProcessorType::Dec => dec_u16(&header[16..18]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[16..18]),
-    };
-
-    let analog_samples_per_3d_point = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[18..20]),
-        ProcessorType::Dec => dec_u16(&header[18..20]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[18..20]),
-    };
-
-    let frame_rate = match processor_type {
-        ProcessorType::Intel => intel_f32(&header[20..24]),
-        ProcessorType::Dec => dec_f32(&header[20..24]),
-        ProcessorType::SgiMips => sgi_mips_f32(&header[20..24]),
-    };
-
-    let supports_event_labels_value = match processor_type {
-        ProcessorType::Intel => intel_u16(&header[300..302]),
-        ProcessorType::Dec => dec_u16(&header[300..302]),
-        ProcessorType::SgiMips => sgi_mips_u16(&header[300..302]),
-    };
-
+    let num_3d_points_per_frame = bytes_to_u16(&header[2..4], processor_type);
+    let num_analog_samples_per_frame = bytes_to_u16(&header[4..6], processor_type);
+    let first_frame = bytes_to_u16(&header[6..8], processor_type);
+    let last_frame = bytes_to_u16(&header[8..10], processor_type);
+    let max_interpolation_gap = bytes_to_u16(&header[10..12], processor_type);
+    let scale_factor = bytes_to_f32(&header[12..16], processor_type);
+    let data_start_block = bytes_to_u16(&header[16..18], processor_type);
+    let analog_samples_per_3d_point = bytes_to_u16(&header[18..20], processor_type);
+    let frame_rate = bytes_to_f32(&header[20..24], processor_type);
+    let supports_event_labels_value = bytes_to_u16(&header[300..302], processor_type);
     let supports_event_labels = supports_event_labels_value == 0x3039;
-
     let num_time_events = header[302];
-
     let mut event_times = [0.0; 18];
 
     // event times start at byte 306
     for i in 0..18 {
         let start = 304 + (i * 4);
         let end = start + 4;
-
-        event_times[i] = match processor_type {
-            ProcessorType::Intel => intel_f32(&header[start..end]),
-            ProcessorType::Dec => dec_f32(&header[start..end]),
-            ProcessorType::SgiMips => sgi_mips_f32(&header[start..end]),
-        };
+        event_times[i] = bytes_to_f32(&header[start..end], processor_type);
     }
 
     // event display flags start at byte 378
@@ -131,7 +94,7 @@ pub fn parse_header(header: &[u8; 512], processor_type: &ProcessorType) -> Heade
 
     let processor_type: ProcessorType = (*processor_type).clone();
 
-    Header {
+    Ok(Header {
         parameter_start_block,
         data_format,
         processor_type,
@@ -149,7 +112,7 @@ pub fn parse_header(header: &[u8; 512], processor_type: &ProcessorType) -> Heade
         event_times,
         event_display_flags,
         event_labels,
-    }
+    })
 }
 
 impl std::fmt::Display for Header {
@@ -231,15 +194,15 @@ impl std::cmp::PartialEq for Header {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_header_from_file;
+    use crate::header::read_header_from_file;
     #[test]
     fn test_header_eq() {
-        let header1 = parse_header_from_file("res/Sample01/Eb015si.c3d").unwrap();
-        let header2 = parse_header_from_file("res/Sample01/Eb015pi.c3d").unwrap();
-        let header3 = parse_header_from_file("res/Sample01/Eb015vi.c3d").unwrap();
-        let header4 = parse_header_from_file("res/Sample01/Eb015sr.c3d").unwrap();
-        let header5 = parse_header_from_file("res/Sample01/Eb015pr.c3d").unwrap();
-        let header6 = parse_header_from_file("res/Sample01/Eb015vr.c3d").unwrap();
+        let header1 = read_header_from_file("res/Sample01/Eb015si.c3d").unwrap();
+        let header2 = read_header_from_file("res/Sample01/Eb015pi.c3d").unwrap();
+        let header3 = read_header_from_file("res/Sample01/Eb015vi.c3d").unwrap();
+        let header4 = read_header_from_file("res/Sample01/Eb015sr.c3d").unwrap();
+        let header5 = read_header_from_file("res/Sample01/Eb015pr.c3d").unwrap();
+        let header6 = read_header_from_file("res/Sample01/Eb015vr.c3d").unwrap();
         assert!(&header1 == &header2);
         assert!(&header2 == &header3);
         assert!(&header3 == &header4);
@@ -250,11 +213,11 @@ mod tests {
     #[test]
     fn test_parse_advanced_realtime_tracking() {
         // Advanced Realtime Tracking GmbH
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample.c3d"
         )
         .is_ok());
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample-fingers.c3d"
         )
         .is_ok());
@@ -263,11 +226,11 @@ mod tests {
     #[test]
     fn test_parse_codamotion() {
         // Codamotion
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Codamotion/codamotion_gaitwands_19970212.c3d"
         )
         .is_ok());
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Codamotion/codamotion_gaitwands_20150204.c3d"
         )
         .is_ok());
@@ -276,18 +239,18 @@ mod tests {
     #[test]
     fn test_parse_cometa() {
         // Cometa
-        assert!(parse_header_from_file("res/Sample00/Cometa Systems/EMG Data Cometa.c3d").is_ok());
+        assert!(read_header_from_file("res/Sample00/Cometa Systems/EMG Data Cometa.c3d").is_ok());
     }
 
     #[test]
     fn test_parse_innovative_sports_training() {
         // Innovative Sports Training
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Innovative Sports Training/Gait with EMG.c3d"
         )
         .is_ok());
         assert!(
-            parse_header_from_file("res/Sample00/Innovative Sports Training/Static Pose.c3d")
+            read_header_from_file("res/Sample00/Innovative Sports Training/Static Pose.c3d")
                 .is_ok()
         );
     }
@@ -295,28 +258,28 @@ mod tests {
     #[test]
     fn test_parse_motion_analysis_corporation() {
         // Motion Analysis Corporation
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Motion Analysis Corporation/Sample_Jump2.c3d"
         )
         .is_ok());
         assert!(
-            parse_header_from_file("res/Sample00/Motion Analysis Corporation/Walk1.c3d").is_ok()
+            read_header_from_file("res/Sample00/Motion Analysis Corporation/Walk1.c3d").is_ok()
         );
     }
 
     #[test]
     fn test_parse_nexgen_ergonomics() {
         // NexGen Ergonomics
-        assert!(parse_header_from_file("res/Sample00/NexGen Ergonomics/test1.c3d").is_ok());
+        assert!(read_header_from_file("res/Sample00/NexGen Ergonomics/test1.c3d").is_ok());
     }
 
     #[test]
     fn test_parse_vicon_motion_systems() {
         // Vicon Motion Systems
         assert!(
-            parse_header_from_file("res/Sample00/Vicon Motion Systems/TableTennis.c3d").is_ok()
+            read_header_from_file("res/Sample00/Vicon Motion Systems/TableTennis.c3d").is_ok()
         );
-        assert!(parse_header_from_file(
+        assert!(read_header_from_file(
             "res/Sample00/Vicon Motion Systems/pyCGM2 lower limb CGM24 Walking01.c3d"
         )
         .is_ok());
