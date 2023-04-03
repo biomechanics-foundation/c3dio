@@ -1,6 +1,8 @@
+
 use crate::parse::{C3dParseError, read_c3d, parse_basic_info, split_c3d};
 use crate::processor::{ProcessorType, bytes_to_u16, bytes_to_f32};
 
+#[derive(Debug)]
 pub struct Header {
     parameter_start_block: u8,
     data_format: u8,
@@ -194,7 +196,7 @@ impl std::cmp::PartialEq for Header {
 
 #[cfg(test)]
 mod tests {
-    use crate::header::read_header_from_file;
+    use super::*;
     #[test]
     fn test_header_eq() {
         let header1 = read_header_from_file("res/Sample01/Eb015si.c3d").unwrap();

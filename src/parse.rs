@@ -1,6 +1,5 @@
 use std::fs;
 
-use crate::header::{parse_header, Header};
 use crate::processor::{bytes_to_u16, get_processor, ProcessorType};
 
 #[derive(Debug)]
@@ -9,10 +8,13 @@ pub enum C3dParseError {
     InsufficientBlocks(String),
     InvalidHeaderStartBlock,
     InvalidParameterStartBlock,
+    InvalidParameterData,
     InvalidDataStartBlock,
     InvalidProcessorType,
     InvalidDataType,
     InvalidParametersOffset,
+    MissingGroup(String),
+    MissingParameter(String),
 }
 
 pub fn read_c3d(file: &str) -> Result<Vec<u8>, C3dParseError> {
@@ -24,7 +26,7 @@ pub fn read_c3d(file: &str) -> Result<Vec<u8>, C3dParseError> {
     Ok(contents)
 }
 
-pub fn parse_basic_info(contents: &Vec<u8>) -> Result<(u8, u16, ProcessorType), C3dParseError> {
+pub fn parse_basic_info(contents: &[u8]) -> Result<(u8, u16, ProcessorType), C3dParseError> {
     if contents.len() < 512 {
         return Err(C3dParseError::InsufficientBlocks(
             "Header block is missing".to_string(),
@@ -63,7 +65,7 @@ pub fn parse_basic_info(contents: &Vec<u8>) -> Result<(u8, u16, ProcessorType), 
 }
 
 pub fn split_c3d(
-    contents: &Vec<u8>,
+    contents: &[u8],
     parameter_start_block_index: u8,
     data_start_block_index: u16,
 ) -> Result<(&[u8], &[u8], &[u8]), C3dParseError> {

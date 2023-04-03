@@ -1,12 +1,25 @@
+use crate::data::DataFormat;
 use crate::parse::{parse_basic_info, read_c3d, split_c3d, C3dParseError};
 use crate::processor::{bytes_to_f32, bytes_to_i16, bytes_to_u16, get_processor, ProcessorType};
+use ndarray::{Array, ArrayView, Axis, IxDyn, Order};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DataType {
-    Char = -1,
-    Byte = 1,
-    Integer = 2,
-    Float = 4,
+    Char,
+    Byte,
+    Integer,
+    Float,
+}
+
+impl From<DataType> for usize {
+    fn from(data_type: DataType) -> Self {
+        match data_type {
+            DataType::Char => 1,
+            DataType::Byte => 1,
+            DataType::Integer => 2,
+            DataType::Float => 4,
+        }
+    }
 }
 
 impl TryFrom<i8> for DataType {
@@ -25,16 +38,256 @@ impl TryFrom<i8> for DataType {
 
 #[derive(Debug, Clone)]
 pub enum ParameterData {
-    Char(Vec<char>),
-    Byte(Vec<u8>),
-    Integer(Vec<i16>),
-    Float(Vec<f32>),
+    Char(Array<char, IxDyn>),
+    Byte(Array<u8, IxDyn>),
+    Integer(Array<i16, IxDyn>),
+    Float(Array<f32, IxDyn>),
+}
+
+impl From<Array<char, IxDyn>> for ParameterData {
+    fn from(array: Array<char, IxDyn>) -> Self {
+        ParameterData::Char(array)
+    }
+}
+
+impl From<Array<u8, IxDyn>> for ParameterData {
+    fn from(array: Array<u8, IxDyn>) -> Self {
+        ParameterData::Byte(array)
+    }
+}
+
+impl From<Array<i16, IxDyn>> for ParameterData {
+    fn from(array: Array<i16, IxDyn>) -> Self {
+        ParameterData::Integer(array)
+    }
+}
+
+impl From<Array<f32, IxDyn>> for ParameterData {
+    fn from(array: Array<f32, IxDyn>) -> Self {
+        ParameterData::Float(array)
+    }
+}
+
+impl ParameterData {
+    fn new(
+        data: &[u8],
+        data_type: DataType,
+        dimensions: &[usize],
+        processor_type: &ProcessorType,
+    ) -> Result<Self, C3dParseError> {
+        if data.len() % usize::from(data_type) != 0 {
+            return Err(C3dParseError::InvalidParameterData);
+        }
+        if dimensions.iter().product::<usize>() != data.len() / usize::from(data_type) {
+            return Err(C3dParseError::InvalidParameterData);
+        }
+        let dimensions = dimensions
+            .iter()
+            .map(|&x| x as usize)
+            .collect::<Vec<usize>>();
+        let shape = IxDyn(dimensions.as_slice());
+        let array = match data_type {
+            DataType::Char => {
+                let data = data.iter().map(|&x| x as char).collect::<Vec<char>>();
+                let array = ArrayView::<char, IxDyn>::from_shape(
+                    IxDyn(vec![data.len()].as_slice()),
+                    data.as_slice(),
+                )
+                .unwrap();
+                let array = array
+                    .to_shape(((shape), Order::ColumnMajor))
+                    .unwrap()
+                    .to_owned();
+                ParameterData::Char(array)
+            }
+            DataType::Byte => {
+                let array =
+                    ArrayView::<u8, IxDyn>::from_shape(IxDyn(vec![data.len()].as_slice()), data)
+                        .unwrap();
+                let array = array
+                    .to_shape(((shape), Order::ColumnMajor))
+                    .unwrap()
+                    .to_owned();
+                ParameterData::from(array)
+            }
+            DataType::Integer => {
+                let data = data
+                    .chunks(2)
+                    .map(|x| bytes_to_i16(x, processor_type))
+                    .collect::<Vec<i16>>();
+                let array = ArrayView::<i16, IxDyn>::from_shape(
+                    IxDyn(vec![data.len()].as_slice()),
+                    data.as_slice(),
+                )
+                .unwrap();
+                let array = array
+                    .to_shape(((shape), Order::ColumnMajor))
+                    .unwrap()
+                    .to_owned();
+                ParameterData::Integer(array)
+            }
+            DataType::Float => {
+                let data = data
+                    .chunks(4)
+                    .map(|x| bytes_to_f32(x, processor_type))
+                    .collect::<Vec<f32>>();
+                let array = ArrayView::<f32, IxDyn>::from_shape(
+                    IxDyn(vec![data.len()].as_slice()),
+                    data.as_slice(),
+                )
+                .unwrap();
+                let array = array
+                    .to_shape(((shape), Order::ColumnMajor))
+                    .unwrap()
+                    .to_owned();
+                ParameterData::Float(array)
+            }
+        };
+
+        Ok(array)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Parameters {
     groups: Vec<Group>,
-    parameters: Vec<Parameter>,
+    pub parameters: Vec<Parameter>,
+}
+
+impl Parameters {
+    pub fn get_group(&self, group_name: &str) -> Option<&Group> {
+        self.groups.iter().find(|&x| x.group_name == group_name)
+    }
+    pub fn get_parameter(&self, group_name: &str, parameter_name: &str) -> Option<&Parameter> {
+        let group = self.get_group(group_name)?;
+        self.parameters
+            .iter()
+            .find(|&x| x.parameter_name == parameter_name && x.group_id == group.group_id)
+    }
+    pub fn get_parameter_data(
+        &self,
+        group_name: &str,
+        parameter_name: &str,
+    ) -> Option<&ParameterData> {
+        let parameter = self.get_parameter(group_name, parameter_name)?;
+        Some(&parameter.data)
+    }
+
+    pub fn get_data_format(&self) -> Option<DataFormat> {
+        let data = self.get_parameter_data("POINT", "SCALE");
+        if let Some(ParameterData::Float(array)) = data {
+            let scale = array.first();
+            if let Some(&scale) = scale {
+                if scale < 0.0 {
+                    return Some(DataFormat::Float);
+                } else {
+                    return Some(DataFormat::Integer);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn get_num_frames(&self) -> Option<usize> {
+        let data = self.get_parameter_data("POINT", "FRAMES");
+        if let Some(ParameterData::Integer(array)) = data {
+            let frames = array.first();
+            if let Some(&frames) = frames {
+                return Some(frames as usize);
+            }
+        }
+        None
+    }
+
+    pub fn get_num_points(&self) -> Option<usize> {
+        let data = self.get_parameter_data("POINT", "USED");
+        if let Some(ParameterData::Integer(array)) = data {
+            let points = array.first();
+            if let Some(&points) = points {
+                return Some(points as usize);
+            }
+        }
+        None
+    }
+
+    pub fn get_point_labels(&self) -> Option<Vec<String>> {
+        let data = self.get_parameter_data("POINT", "LABELS");
+        if let Some(ParameterData::Char(array)) = data {
+            let labels = array
+                .axis_iter(Axis(1))
+                .map(|x| x.into_iter().collect::<String>())
+                .collect::<Vec<String>>();
+            return Some(labels);
+        }
+        None
+    }
+
+    pub fn get_point_scale(&self) -> Option<f32> {
+        let data = self.get_parameter_data("POINT", "SCALE");
+        if let Some(ParameterData::Float(array)) = data {
+            let scale = array.first();
+            if let Some(&scale) = scale {
+                return Some(scale);
+            }
+        }
+        None
+    }
+
+    pub fn get_point_rate(&self) -> Option<f32> {
+        let data = self.get_parameter_data("POINT", "RATE");
+        if let Some(ParameterData::Float(array)) = data {
+            let rate = array.first();
+            if let Some(&rate) = rate {
+                return Some(rate);
+            }
+        }
+        None
+    }
+
+    pub fn get_num_analog_channels(&self) -> Option<usize> {
+        let data = self.get_parameter_data("ANALOG", "USED");
+        if let Some(ParameterData::Integer(array)) = data {
+            let channels = array.first();
+            if let Some(&channels) = channels {
+                return Some(channels as usize);
+            }
+        }
+        None
+    }
+
+    pub fn get_analog_labels(&self) -> Option<Vec<String>> {
+        let data = self.get_parameter_data("ANALOG", "LABELS");
+        if let Some(ParameterData::Char(array)) = data {
+            let labels = array
+                .axis_iter(Axis(1))
+                .map(|x| x.into_iter().collect::<String>())
+                .collect::<Vec<String>>();
+            return Some(labels);
+        }
+        None
+    }
+
+    pub fn get_analog_sample_rate(&self) -> Option<f32> {
+        let data = self.get_parameter_data("ANALOG", "RATE");
+        if let Some(ParameterData::Float(array)) = data {
+            let rate = array.first();
+            if let Some(&rate) = rate {
+                return Some(rate);
+            }
+        }
+        None
+    }
+
+    pub fn get_analog_scale(&self) -> Option<f32> {
+        let data = self.get_parameter_data("ANALOG", "SCALE");
+        if let Some(ParameterData::Float(array)) = data {
+            let scale = array.first();
+            if let Some(&scale) = scale {
+                return Some(scale);
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -48,9 +301,7 @@ pub struct Group {
 pub struct Parameter {
     group_id: i8,
     parameter_name: String,
-    data_type: DataType,
-    dimensions: Vec<u8>,
-    data: ParameterData,
+    pub data: ParameterData,
     description: String,
 }
 
@@ -66,7 +317,7 @@ pub fn read_parameters_from_file(file: &str) -> Result<Parameters, C3dParseError
         data_start_block_index,
     )?;
 
-    parse_parameters(parameter_blocks, &processor_type)
+    parse_parameters(&parameter_blocks, &processor_type)
 }
 
 pub fn parse_parameters(
@@ -88,10 +339,7 @@ pub fn parse_parameters(
 
     let (groups, parameters) = parse_parameter_blocks(parameter_blocks, processor_type)?;
 
-    Ok(Parameters {
-        groups,
-        parameters,
-    })
+    Ok(Parameters { groups, parameters })
 }
 
 fn parse_parameter_blocks(
@@ -132,16 +380,10 @@ fn parse_next_group_or_parameter(
         return Ok(0);
     } else if group_id < 0 {
         let (group, next_index) = parse_group(&parameter_blocks, index, processor_type)?;
-        if next_index == 0 {
-            return Ok(next_index as usize);
-        }
         groups.push(group);
         Ok(next_index as usize)
     } else {
         let (parameter, next_index) = parse_parameter(&parameter_blocks, index, processor_type)?;
-        if next_index == 0 {
-            return Ok(next_index as usize);
-        }
         parameters.push(parameter);
         Ok(next_index as usize)
     }
@@ -152,21 +394,19 @@ fn parse_group(
     index: usize,
     processor_type: &ProcessorType,
 ) -> Result<(Group, u16), C3dParseError> {
-    let num_chars_in_name = parameter_blocks[index] as i8;
-    let group_id = parameter_blocks[index + 1] as i8;
-    let group_name = parse_group_name(&parameter_blocks, index + 2, num_chars_in_name)?;
-    let next_group_index_bytes = &parameter_blocks[index + 2 + num_chars_in_name.abs() as usize
-        ..index + 4 + num_chars_in_name.abs() as usize];
-    let next_group_index = bytes_to_i16(next_group_index_bytes, processor_type) as u16
-        + 2
-        + num_chars_in_name.abs() as u16
-        + index as u16;
-    let num_chars_in_description = parameter_blocks[index + 4 + num_chars_in_name.abs() as usize];
-    let description = parse_description(
-        &parameter_blocks,
-        index + 5 + num_chars_in_name.abs() as usize,
-        num_chars_in_description,
-    )?;
+    let mut i = index;
+    let num_chars_in_name = parameter_blocks[i] as i8;
+    i += 1;
+    let group_id = (parameter_blocks[i] as i8).abs();
+    i += 1;
+    let group_name = parse_group_name(&parameter_blocks, i, num_chars_in_name)?;
+    i += num_chars_in_name.abs() as usize;
+    let next_group_index_bytes = &parameter_blocks[i..i + 2];
+    let next_group_index = bytes_to_i16(next_group_index_bytes, processor_type) as u16 + i as u16;
+    i += 2;
+    let num_chars_in_description = parameter_blocks[i];
+    i += 1;
+    let description = parse_description(&parameter_blocks, i, num_chars_in_description)?;
 
     Ok((
         Group {
@@ -211,45 +451,33 @@ fn parse_parameter(
     index: usize,
     processor_type: &ProcessorType,
 ) -> Result<(Parameter, u16), C3dParseError> {
-    let num_chars_in_name = parameter_blocks[index] as i8;
-    let group_id = parameter_blocks[index + 1] as i8;
-    let parameter_name = parse_parameter_name(&parameter_blocks, index + 2, num_chars_in_name)?;
-    let next_group_index_bytes = &parameter_blocks[index + 2 + num_chars_in_name.abs() as usize
-        ..index + 4 + num_chars_in_name.abs() as usize];
-    let next_group_index = bytes_to_i16(next_group_index_bytes, processor_type) as u16
-        + 2
-        + num_chars_in_name.abs() as u16
-        + index as u16;
-    let data_type =
-        DataType::try_from(parameter_blocks[index + 4 + num_chars_in_name.abs() as usize] as i8)?;
-    let num_dimensions = parameter_blocks[index + 5 + num_chars_in_name.abs() as usize];
-    let dimensions = parse_dimensions(
-        &parameter_blocks,
-        index + 6 + num_chars_in_name.abs() as usize,
-        num_dimensions,
-    )?;
-    let data = parse_data(
-        &parameter_blocks,
-        index + 6 + num_chars_in_name.abs() as usize + num_dimensions as usize,
-        &dimensions,
-        data_type,
-    )?;
-    let data_size = (data_type as i8).abs() as usize;
-    let data_byte_size = data.len() * data_size;
-    let num_chars_in_description = parameter_blocks
-        [index + 6 + num_chars_in_name.abs() as usize + num_dimensions as usize + data_byte_size];
-    let description = parse_description(
-        &parameter_blocks,
-        index + 7 + num_chars_in_name.abs() as usize + num_dimensions as usize + data_byte_size,
-        num_chars_in_description,
-    )?;
+    let mut i = index;
+    let num_chars_in_name = parameter_blocks[i] as i8;
+    i += 1;
+    let group_id = parameter_blocks[i] as i8;
+    i += 1;
+    let parameter_name = parse_parameter_name(&parameter_blocks, i, num_chars_in_name)?;
+    i += num_chars_in_name.abs() as usize;
+    let next_group_index_bytes = &parameter_blocks[i..i + 2];
+    let next_group_index = bytes_to_i16(next_group_index_bytes, processor_type) as u16 + i as u16;
+    i += 2;
+    let data_type = DataType::try_from(parameter_blocks[i] as i8)?;
+    i += 1;
+    let num_dimensions = parameter_blocks[i];
+    i += 1;
+    let dimensions = parse_dimensions(&parameter_blocks, i, num_dimensions)?;
+    i += num_dimensions as usize;
+    let (data, data_byte_size) =
+        parse_data(&parameter_blocks, i, &dimensions, data_type, processor_type)?;
+    i += data_byte_size;
+    let num_chars_in_description = parameter_blocks[i];
+    i += 1;
+    let description = parse_description(&parameter_blocks, i, num_chars_in_description)?;
 
     Ok((
         Parameter {
             group_id,
             parameter_name,
-            data_type,
-            dimensions,
             data,
             description,
         },
@@ -288,26 +516,28 @@ fn parse_dimensions(
 fn parse_data(
     parameter_blocks: &[u8],
     index: usize,
-    dimensions: &[u8],
+    dimensions: &Vec<u8>,
     data_type: DataType,
-) -> Result<Vec<u8>, C3dParseError> {
-    let mut data = Vec::new();
+    processor_type: &ProcessorType,
+) -> Result<(ParameterData, usize), C3dParseError> {
+    let dimensions_product = &dimensions
+        .clone()
+        .iter()
+        .map(|x| *x as usize)
+        .product::<usize>();
 
-    let mut dimensions_product = 1;
-    if dimensions.len() != 0 {
-        for dimension in dimensions {
-            dimensions_product *= *dimension as usize;
-        }
-    }
+    let data_byte_size = dimensions_product * usize::from(data_type);
 
-    let data_size = (data_type as i8).abs() as usize;
+    let bytes: &[u8] = &parameter_blocks[index..index + data_byte_size];
+    let dimensions: &[usize] = &dimensions
+        .iter()
+        .map(|x| *x as usize)
+        .collect::<Vec<usize>>();
 
-    for i in 0..dimensions_product {
-        let data_index = index + (i * data_size);
-        data.push(parameter_blocks[data_index]);
-    }
-
-    Ok(data)
+    Ok((
+        ParameterData::new(bytes, data_type, dimensions, processor_type)?,
+        data_byte_size,
+    ))
 }
 
 #[cfg(test)]
