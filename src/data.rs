@@ -11,17 +11,17 @@ pub enum DataFormat {
 
 #[derive(Debug)]
 pub struct Data {
-    point_data: PointData,
+    pub point_data: PointData,
     analog_data: AnalogData,
     data_format: DataFormat,
 }
 
 #[derive(Debug)]
 pub struct PointData {
-    data: Array3<f32>,
+    pub data: Array3<f32>,
     cameras: Array3<bool>,
     residual: Array2<f32>,
-    labels: Vec<String>,
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -102,9 +102,6 @@ pub fn parse_data(
                     parse_analog_data_int(analog_slice, num_analog_channels, processor_type)
                 }
             };
-            for k in 0..analog_points_per_frame {
-                *analog_iter.next().unwrap() = analog_data[k];
-            }
         }
     }
 
