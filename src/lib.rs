@@ -4,7 +4,7 @@ pub mod c3d;
 pub mod prelude {
     pub use crate::{
         c3d::C3d,
-        parse::{read_c3d, C3dParseError},
+        parse::C3dParseError,
     };
 }
 #[path = "data.rs"]

@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
+use crate::c3d::C3d;
 use crate::data::DataFormat;
-use crate::parse::{parse_basic_info, read_c3d, split_c3d, C3dParseError};
-use crate::processor::{bytes_to_f32, bytes_to_i16, bytes_to_u16, get_processor, ProcessorType};
+use crate::parse::C3dParseError;
+use crate::processor::{bytes_to_f32, bytes_to_i16, ProcessorType};
 use ndarray::{Array, ArrayView, Axis, IxDyn, Order};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -69,6 +72,10 @@ impl From<Array<f32, IxDyn>> for ParameterData {
 }
 
 impl ParameterData {
+    pub(super) fn blank() -> Self {
+        ParameterData::Char(Array::from_shape_vec(IxDyn(&[0]), vec![]).unwrap())
+    }
+
     fn new(
         data: &[u8],
         data_type: DataType,
@@ -113,7 +120,7 @@ impl ParameterData {
             DataType::Integer => {
                 let data = data
                     .chunks(2)
-                    .map(|x| bytes_to_i16(x, processor_type))
+                    .map(|x| bytes_to_i16(x.try_into().unwrap(), processor_type))
                     .collect::<Vec<i16>>();
                 let array = ArrayView::<i16, IxDyn>::from_shape(
                     IxDyn(vec![data.len()].as_slice()),
@@ -129,7 +136,7 @@ impl ParameterData {
             DataType::Float => {
                 let data = data
                     .chunks(4)
-                    .map(|x| bytes_to_f32(x, processor_type))
+                    .map(|x| bytes_to_f32(x.try_into().unwrap(), processor_type))
                     .collect::<Vec<f32>>();
                 let array = ArrayView::<f32, IxDyn>::from_shape(
                     IxDyn(vec![data.len()].as_slice()),
@@ -149,20 +156,27 @@ impl ParameterData {
 }
 
 #[derive(Debug, Clone)]
-pub struct Parameters {
+struct Parameters {
     groups: Vec<Group>,
-    pub parameters: Vec<Parameter>,
+    parameters: Vec<Parameter>,
 }
 
 impl Parameters {
-    pub fn get_group(&self, group_name: &str) -> Option<&Group> {
-        self.groups.iter().find(|&x| x.group_name == group_name)
+    pub(super) fn blank() -> Self {
+        Parameters {
+            groups: vec![],
+            parameters: vec![],
+        }
     }
-    pub fn get_parameter(&self, group_name: &str, parameter_name: &str) -> Option<&Parameter> {
+
+    fn get_group(&self, group_name: &str) -> Option<&Group> {
+        self.groups.iter().find(|&x| x.name == group_name)
+    }
+    fn get_parameter(&self, group_name: &str, parameter_name: &str) -> Option<&Parameter> {
         let group = self.get_group(group_name)?;
         self.parameters
             .iter()
-            .find(|&x| x.parameter_name == parameter_name && x.group_id == group.group_id)
+            .find(|&x| x.name == parameter_name && x.group_id == group.id)
     }
     pub fn get_parameter_data(
         &self,
@@ -291,67 +305,37 @@ impl Parameters {
 }
 
 #[derive(Debug, Clone)]
-pub struct Group {
-    group_id: i8,
-    group_name: String,
+struct Group {
+    id: i8,
+    name: String,
     description: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct Parameter {
+struct Parameter {
     group_id: i8,
-    parameter_name: String,
+    name: String,
     pub data: ParameterData,
     description: String,
 }
 
-pub fn read_parameters_from_file(file: &str) -> Result<Parameters, C3dParseError> {
-    let contents = read_c3d(file)?;
-
-    let (parameter_start_block_index, data_start_block_index, processor_type) =
-        parse_basic_info(&contents)?;
-
-    let (_, parameter_blocks, _) = split_c3d(
-        &contents,
-        parameter_start_block_index,
-        data_start_block_index,
-    )?;
-
-    parse_parameters(&parameter_blocks, &processor_type)
-}
-
-pub fn parse_parameters(
-    parameter_blocks: &[u8],
+pub fn parse_parameter_blocks(
+    parameter_blocks: &Vec<u8>,
     processor_type: &ProcessorType,
-) -> Result<Parameters, C3dParseError> {
+) -> Result<
+    (
+        HashMap<String, HashMap<String, ParameterData>>,
+        HashMap<String, String>,
+        HashMap<String, String>,
+    ),
+    C3dParseError,
+> {
     if parameter_blocks.len() < 512 {
         return Err(C3dParseError::InvalidParameterStartBlock);
     }
 
-    let check_processor_type = match get_processor(parameter_blocks) {
-        Ok(processor_type) => processor_type,
-        Err(e) => return Err(e),
-    };
-
-    if check_processor_type != *processor_type {
-        return Err(C3dParseError::InvalidProcessorType);
-    }
-
-    let (groups, parameters) = parse_parameter_blocks(parameter_blocks, processor_type)?;
-
-    Ok(Parameters { groups, parameters })
-}
-
-fn parse_parameter_blocks(
-    parameter_blocks: &[u8],
-    processor_type: &ProcessorType,
-) -> Result<(Vec<Group>, Vec<Parameter>), C3dParseError> {
-    if parameter_blocks.len() < 512 {
-        return Err(C3dParseError::InvalidParameterStartBlock);
-    }
-
-    let mut groups = Vec::new();
-    let mut parameters = Vec::new();
+    let mut groups: Vec<Group> = Vec::new();
+    let mut parameters: Vec<Parameter> = Vec::new();
 
     let mut index = 4;
 
@@ -364,7 +348,30 @@ fn parse_parameter_blocks(
             processor_type,
         )?;
     }
-    Ok((groups, parameters))
+    let mut groups_map = HashMap::new();
+    let mut group_descriptions = HashMap::new();
+    let mut parameter_descriptions = HashMap::new();
+    let mut temp_group_id_to_name = HashMap::new();
+    for group in groups {
+        temp_group_id_to_name.insert(group.id, group.name.clone());
+        groups_map.insert(group.name.clone(), HashMap::new());
+        group_descriptions.insert(group.name, group.description);
+    }
+    for parameter in parameters {
+        let group_name = temp_group_id_to_name.get(&parameter.group_id);
+        if let Some(group_name) = group_name {
+            groups_map
+                .get_mut(group_name)
+                .ok_or(C3dParseError::InvalidGroupId)?
+                .insert(parameter.name.clone(), parameter.data);
+            parameter_descriptions.insert(parameter.name, parameter.description);
+
+        }
+        else {
+            return Err(C3dParseError::InvalidGroupId);
+        }
+    }
+    Ok((groups_map, group_descriptions, parameter_descriptions))
 }
 
 fn parse_next_group_or_parameter(
@@ -397,12 +404,13 @@ fn parse_group(
     let mut i = index;
     let num_chars_in_name = parameter_blocks[i] as i8;
     i += 1;
-    let group_id = (parameter_blocks[i] as i8).abs();
+    let id = (parameter_blocks[i] as i8).abs();
     i += 1;
-    let group_name = parse_group_name(&parameter_blocks, i, num_chars_in_name)?;
+    let name = parse_group_name(&parameter_blocks, i, num_chars_in_name)?;
     i += num_chars_in_name.abs() as usize;
     let next_group_index_bytes = &parameter_blocks[i..i + 2];
-    let next_group_index = bytes_to_i16(next_group_index_bytes, processor_type) as u16 + i as u16;
+    let next_group_index =
+        bytes_to_i16(next_group_index_bytes.try_into().unwrap(), processor_type) as u16 + i as u16;
     i += 2;
     let num_chars_in_description = parameter_blocks[i];
     i += 1;
@@ -410,8 +418,8 @@ fn parse_group(
 
     Ok((
         Group {
-            group_id,
-            group_name,
+            id,
+            name,
             description,
         },
         next_group_index as u16,
@@ -456,10 +464,11 @@ fn parse_parameter(
     i += 1;
     let group_id = parameter_blocks[i] as i8;
     i += 1;
-    let parameter_name = parse_parameter_name(&parameter_blocks, i, num_chars_in_name)?;
+    let name = parse_parameter_name(&parameter_blocks, i, num_chars_in_name)?;
     i += num_chars_in_name.abs() as usize;
     let next_group_index_bytes = &parameter_blocks[i..i + 2];
-    let next_group_index = bytes_to_i16(next_group_index_bytes, processor_type) as u16 + i as u16;
+    let next_group_index =
+        bytes_to_i16(next_group_index_bytes.try_into().unwrap(), processor_type) as u16 + i as u16;
     i += 2;
     let data_type = DataType::try_from(parameter_blocks[i] as i8)?;
     i += 1;
@@ -477,7 +486,7 @@ fn parse_parameter(
     Ok((
         Parameter {
             group_id,
-            parameter_name,
+            name,
             data,
             description,
         },
@@ -546,17 +555,17 @@ mod tests {
 
     #[test]
     fn test_parse_parameters() {
-        let parameters = read_parameters_from_file("res/Sample01/Eb015si.c3d");
+        let parameters = C3d::parameters("res/Sample01/Eb015si.c3d");
         assert!(parameters.is_ok());
     }
     #[test]
     fn test_parse_advanced_realtime_tracking() {
         // Advanced Realtime Tracking GmbH
-        assert!(read_parameters_from_file(
+        assert!(C3d::parameters(
             "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample.c3d"
         )
         .is_ok());
-        assert!(read_parameters_from_file(
+        assert!(C3d::parameters(
             "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample-fingers.c3d"
         )
         .is_ok());
@@ -565,62 +574,49 @@ mod tests {
     #[test]
     fn test_parse_codamotion() {
         // Codamotion
-        assert!(read_parameters_from_file(
-            "res/Sample00/Codamotion/codamotion_gaitwands_19970212.c3d"
-        )
-        .is_ok());
-        assert!(read_parameters_from_file(
-            "res/Sample00/Codamotion/codamotion_gaitwands_20150204.c3d"
-        )
-        .is_ok());
+        assert!(
+            C3d::parameters("res/Sample00/Codamotion/codamotion_gaitwands_19970212.c3d").is_ok()
+        );
+        assert!(
+            C3d::parameters("res/Sample00/Codamotion/codamotion_gaitwands_20150204.c3d").is_ok()
+        );
     }
 
     #[test]
     fn test_parse_cometa() {
         // Cometa
-        assert!(
-            read_parameters_from_file("res/Sample00/Cometa Systems/EMG Data Cometa.c3d").is_ok()
-        );
+        assert!(C3d::parameters("res/Sample00/Cometa Systems/EMG Data Cometa.c3d").is_ok());
     }
 
     #[test]
     fn test_parse_innovative_sports_training() {
         // Innovative Sports Training
-        assert!(read_parameters_from_file(
-            "res/Sample00/Innovative Sports Training/Gait with EMG.c3d"
-        )
-        .is_ok());
-        assert!(read_parameters_from_file(
-            "res/Sample00/Innovative Sports Training/Static Pose.c3d"
-        )
-        .is_ok());
+        assert!(
+            C3d::parameters("res/Sample00/Innovative Sports Training/Gait with EMG.c3d").is_ok()
+        );
+        assert!(C3d::parameters("res/Sample00/Innovative Sports Training/Static Pose.c3d").is_ok());
     }
 
     #[test]
     fn test_parse_motion_analysis_corporation() {
         // Motion Analysis Corporation
-        assert!(read_parameters_from_file(
-            "res/Sample00/Motion Analysis Corporation/Sample_Jump2.c3d"
-        )
-        .is_ok());
         assert!(
-            read_parameters_from_file("res/Sample00/Motion Analysis Corporation/Walk1.c3d").is_ok()
+            C3d::parameters("res/Sample00/Motion Analysis Corporation/Sample_Jump2.c3d").is_ok()
         );
+        assert!(C3d::parameters("res/Sample00/Motion Analysis Corporation/Walk1.c3d").is_ok());
     }
 
     #[test]
     fn test_parse_nexgen_ergonomics() {
         // NexGen Ergonomics
-        assert!(read_parameters_from_file("res/Sample00/NexGen Ergonomics/test1.c3d").is_ok());
+        assert!(C3d::parameters("res/Sample00/NexGen Ergonomics/test1.c3d").is_ok());
     }
 
     #[test]
     fn test_parse_vicon_motion_systems() {
         // Vicon Motion Systems
-        assert!(
-            read_parameters_from_file("res/Sample00/Vicon Motion Systems/TableTennis.c3d").is_ok()
-        );
-        assert!(read_parameters_from_file(
+        assert!(C3d::parameters("res/Sample00/Vicon Motion Systems/TableTennis.c3d").is_ok());
+        assert!(C3d::parameters(
             "res/Sample00/Vicon Motion Systems/pyCGM2 lower limb CGM24 Walking01.c3d"
         )
         .is_ok());

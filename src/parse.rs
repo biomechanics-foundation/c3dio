@@ -1,6 +1,5 @@
-use std::fs;
-
-use crate::processor::{bytes_to_u16, get_processor, ProcessorType};
+use std::fs::File;
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum C3dParseError {
@@ -15,53 +14,15 @@ pub enum C3dParseError {
     InvalidParametersOffset,
     MissingGroup(String),
     MissingParameter(String),
+    UnknownDataFormat,
+    InvalidGroupId,
+    MissingPointScale,
 }
 
-pub fn read_c3d(file: &str) -> Result<Vec<u8>, C3dParseError> {
-    let contents = match fs::read(file) {
-        Ok(contents) => contents,
-        Err(e) => return Err(C3dParseError::ReadError(e)),
-    };
+pub fn open_c3d(file: &PathBuf) -> Result<File, C3dParseError> {
+    let file = File::open(file).map_err(|e| C3dParseError::ReadError(e))?;
 
-    Ok(contents)
-}
-
-pub fn parse_basic_info(contents: &[u8]) -> Result<(u8, u16, ProcessorType), C3dParseError> {
-    if contents.len() < 512 {
-        return Err(C3dParseError::InsufficientBlocks(
-            "Header block is missing".to_string(),
-        ));
-    }
-
-    let parameter_start_block_index = contents[0];
-    let start_index = (parameter_start_block_index - 1) as usize * 512;
-    let end_index = start_index + 512;
-
-    if end_index > contents.len() as usize {
-        return Err(C3dParseError::InvalidParameterStartBlock);
-    }
-
-    let parameter_start_block = contents.split_at(start_index as usize).1;
-
-    let processor_type = match get_processor(parameter_start_block) {
-        Ok(processor_type) => processor_type,
-        Err(e) => return Err(e),
-    };
-
-    let index_1 = contents
-        .get(16)
-        .ok_or(C3dParseError::InvalidProcessorType)?;
-    let index_2 = contents
-        .get(17)
-        .ok_or(C3dParseError::InvalidProcessorType)?;
-
-    let data_start_block = bytes_to_u16(&[*index_1, *index_2], &processor_type);
-
-    Ok((
-        parameter_start_block_index,
-        data_start_block,
-        processor_type,
-    ))
+    Ok(file)
 }
 
 pub fn split_c3d(
