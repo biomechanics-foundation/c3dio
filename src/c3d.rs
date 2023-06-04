@@ -3,12 +3,14 @@ use crate::data::{
     DataFormat,
 };
 use crate::parameters::{parse_parameter_blocks, ParameterData};
-use crate::parse::C3dParseError;
+
+use crate::{C3d, C3dParseError};
+
 use crate::processor::{bytes_to_f32, bytes_to_u16, get_processor_type, ProcessorType};
 use ndarray::{Array, Array2, Array3};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -20,50 +22,6 @@ pub struct Events {
     pub event_labels: Vec<String>,
 }
 
-#[derive(Debug, PartialEq)]
-enum ParseState {
-    Unparsed,
-    BasicInfo,
-    Header,
-    Parameters,
-    Data,
-}
-
-#[derive(Debug)]
-pub struct C3d {
-    pub file_path: PathBuf,
-    pub file: File,
-    parse_state: ParseState,
-    pub header_read: bool,
-    pub header_bytes: [u8; 512],
-    pub parameter_read: bool,
-    pub parameter_bytes: Vec<u8>,
-    pub parameters: HashMap<String, HashMap<String, ParameterData>>,
-    pub group_descriptions: HashMap<String, String>,
-    pub parameter_descriptions: HashMap<String, String>,
-    pub points: Array3<f32>,
-    pub point_labels: Vec<String>,
-    pub cameras: Array3<bool>,
-    pub residuals: Array2<f32>,
-    pub analog: Array2<f32>,
-    pub analog_labels: Vec<String>,
-    pub analog_channels: u16,
-    pub analog_samples_per_frame: u16,
-    pub data_format: DataFormat,
-    pub parameter_start_block_index: usize,
-    pub data_read: bool,
-    pub data_bytes: Vec<u8>,
-    pub data_start_block_index: usize,
-    pub processor_type: ProcessorType,
-    pub points_per_frame: u16,
-    pub first_frame: u16,
-    pub last_frame: u16,
-    pub max_interpolation_gap: u16,
-    pub scale_factor: f32,
-    pub frame_rate: f32,
-    pub events: Events,
-}
-
 impl PartialEq for C3d {
     fn eq(&self, other: &Self) -> bool {
         self.points == other.points
@@ -73,7 +31,6 @@ impl PartialEq for C3d {
             && self.point_labels == other.point_labels
             && self.analog_labels == other.analog_labels
             && self.parameter_start_block_index == other.parameter_start_block_index
-            && self.data_read == other.data_read
             && self.data_start_block_index == other.data_start_block_index
             && self.points_per_frame == other.points_per_frame
             && self.analog_samples_per_frame == other.analog_samples_per_frame
@@ -87,20 +44,179 @@ impl PartialEq for C3d {
 }
 
 impl C3d {
-    fn blank(file_name: &str) -> Result<C3d, C3dParseError> {
-        let path = PathBuf::from(file_name);
+    pub fn load(file_name: &str) -> Result<C3d, C3dParseError> {
+        let c3d = C3d::empty()?
+            .open_file(file_name)?
+            .parse_basic_info()?
+            .parse_header()?
+            .parse_parameters()?
+            .parse_data()?;
+
+        Ok(c3d)
+    }
+
+    pub fn load_header(file_name: &str) -> Result<C3d, C3dParseError> {
+        let c3d = C3d::empty()?
+            .open_file(file_name)?
+            .parse_basic_info()?
+            .parse_header()?;
+
+        Ok(c3d)
+    }
+
+    pub fn load_parameters(file_name: &str) -> Result<C3d, C3dParseError> {
+        let c3d = C3d::empty()?
+            .open_file(file_name)?
+            .parse_basic_info()?
+            .parse_header()?
+            .parse_parameters()?;
+
+        Ok(c3d)
+    }
+
+    //    pub fn get_parameter(
+    //        &self,
+    //        group_name: &str,
+    //        parameter_name: &str,
+    //    ) -> Option<(&ParameterData, &String)> {
+    //        let group = self.parameters.get(group_name)?;
+    //        let parameter = group.get(parameter_name)?;
+    //        Some((&parameter.0, &parameter.1))
+    //    }
+
+    pub fn get_parameter_data(
+        &self,
+        group_name: &str,
+        parameter_name: &str,
+    ) -> Option<&ParameterData> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        Some(&parameter.0)
+    }
+
+    pub fn get_parameter_float(&self, group_name: &str, parameter_name: &str) -> Option<f32> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        match &parameter.0 {
+            ParameterData::Float(data) => {
+                if data.len() == 1 {
+                    data.first().cloned()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_parameter_float_vec(
+        &self,
+        group_name: &str,
+        parameter_name: &str,
+    ) -> Option<Vec<f32>> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        match &parameter.0 {
+            ParameterData::Float(data) => {
+                if data.ndim() == 1 {
+                    Some(data.to_owned().into_raw_vec())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_parameter_int(&self, group_name: &str, parameter_name: &str) -> Option<i16> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        match &parameter.0 {
+            ParameterData::Integer(data) => {
+                if data.len() == 1 {
+                    data.first().cloned()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_parameter_int_vec(
+        &self,
+        group_name: &str,
+        parameter_name: &str,
+    ) -> Option<Vec<i16>> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        match &parameter.0 {
+            ParameterData::Integer(data) => {
+                if data.ndim() == 1 {
+                    Some(data.to_owned().into_raw_vec())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_parameter_string(&self, group_name: &str, parameter_name: &str) -> Option<String> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        match &parameter.0 {
+            ParameterData::Char(data) => {
+                if data.ndim() == 1 {
+                    let mut string = String::new();
+                    for c in data {
+                        string.push(*c as char);
+                    }
+                    Some(string)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn get_parameter_string_vec(
+        &self,
+        group_name: &str,
+        parameter_name: &str,
+    ) -> Option<Vec<String>> {
+        let group = self.parameters.get(group_name)?;
+        let parameter = group.get(parameter_name)?;
+        match &parameter.0 {
+            ParameterData::Char(data) => {
+                if data.ndim() == 2 {
+                    let mut strings = Vec::new();
+                    for row in data.rows() {
+                        let mut string = String::new();
+                        for c in row {
+                            string.push(*c as char);
+                        }
+                        strings.push(string);
+                    }
+                    Some(strings)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn empty() -> Result<C3d, C3dParseError> {
+        let path = PathBuf::from("");
         Ok(C3d {
             file_path: path,
-            file: File::open(file_name).map_err(|e| C3dParseError::ReadError(e))?,
-            parse_state: ParseState::Unparsed,
+            file: None,
             header_bytes: [0; 512],
             parameter_bytes: Vec::new(),
-            header_read: false,
-            parameter_read: false,
-            data_read: false,
             parameters: HashMap::new(),
             group_descriptions: HashMap::new(),
-            parameter_descriptions: HashMap::new(),
             points: Array3::zeros((0, 0, 0)),
             cameras: Array3::from_elem((0, 0, 0), false),
             residuals: Array2::zeros((0, 0)),
@@ -130,18 +246,32 @@ impl C3d {
         })
     }
 
-    pub fn parse_basic_info(mut self) -> Result<C3d, C3dParseError> {
+    pub(super) fn open_file(mut self, file_name: &str) -> Result<C3d, C3dParseError> {
+        self.file_path = PathBuf::from(file_name);
+        self.file = Some(File::open(&self.file_path).map_err(|e| C3dParseError::ReadError(e))?);
+        Ok(self)
+    }
+
+    pub(super) fn parse_basic_info(mut self) -> Result<C3d, C3dParseError> {
         self.header_bytes = [0u8; 512];
-        self.file
-            .read_exact(&mut self.header_bytes)
+
+        if self.file.is_none() {
+            return Err(C3dParseError::FileNotOpen);
+        }
+
+        let file = self.file.as_mut().unwrap();
+        file.read_exact(&mut self.header_bytes)
             .map_err(|e| C3dParseError::ReadError(e))?;
-        self.header_read = true;
 
         self.parameter_start_block_index = self.header_bytes[0] as usize;
 
+        let blocks_to_skip = self.parameter_start_block_index - 2;
+
+        file.seek(SeekFrom::Current((512 * blocks_to_skip) as i64))
+            .map_err(|e| C3dParseError::ReadError(e))?;
+
         let mut parameter_start_block = [0u8; 512];
-        self.file
-            .read_exact(&mut parameter_start_block)
+        file.read_exact(&mut parameter_start_block)
             .map_err(|e| C3dParseError::ReadError(e))?;
 
         self.processor_type = match get_processor_type(parameter_start_block) {
@@ -160,12 +290,10 @@ impl C3d {
 
         for _ in 0..(self.data_start_block_index - self.parameter_start_block_index - 1) {
             let mut block = [0u8; 512];
-            self.file
-                .read_exact(&mut block)
+            file.read_exact(&mut block)
                 .map_err(|e| C3dParseError::ReadError(e))?;
             parameter_bytes_tail.extend(block.iter());
         }
-        self.parameter_read = true;
 
         self.parameter_bytes = [
             parameter_start_block.as_slice(),
@@ -176,7 +304,7 @@ impl C3d {
         Ok(self)
     }
 
-    pub fn parse_header(mut self) -> Result<C3d, C3dParseError> {
+    pub(super) fn parse_header(mut self) -> Result<C3d, C3dParseError> {
         let processor_type = self.processor_type.clone();
         self.points_per_frame =
             bytes_to_u16(self.header_bytes[2..4].try_into().unwrap(), &processor_type);
@@ -264,66 +392,120 @@ impl C3d {
         Ok(self)
     }
 
-    pub fn parse_parameters(mut self) -> Result<C3d, C3dParseError> {
-        let (parameters, group_descriptions, parameter_descriptions) =
+    pub(super) fn parse_parameters(mut self) -> Result<C3d, C3dParseError> {
+        let (parameters, group_descriptions) =
             parse_parameter_blocks(&self.parameter_bytes, &self.processor_type)?;
 
         self.parameters = parameters;
         self.group_descriptions = group_descriptions;
-        self.parameter_descriptions = parameter_descriptions;
 
-        let point_scale_data = self.get_parameter_value("POINT", "SCALE");
-        if let Some(ParameterData::Float(point_scale)) = point_scale_data {
-            let point_scale = point_scale.first();
-            if let Some(&point_scale) = point_scale {
-                if point_scale < 0.0 {
-                    self.data_format = DataFormat::Float;
-                } else {
-                    self.data_format = DataFormat::Integer;
-                }
+        let point_scale = self.get_parameter_float("POINT", "SCALE");
+        if let Some(point_scale) = point_scale {
+            if point_scale < 0.0 {
+                self.data_format = DataFormat::Float;
+            } else {
+                self.data_format = DataFormat::Integer;
             }
         } else {
-            //self.data_format = DataFormat::Integer;
-            return Err(C3dParseError::MissingPointScale);
+            self.data_format = DataFormat::Integer;
+            //return Err(C3dParseError::MissingPointScale);
         }
 
         Ok(self)
     }
 
-    pub fn get_parameter_value(
-        &self,
-        group_name: &str,
-        parameter_name: &str,
-    ) -> Option<&ParameterData> {
-        let group = self.parameters.get(group_name)?;
-        Some(group.get(parameter_name)?)
-    }
-
-    pub fn parse_data(mut self) -> Result<C3d, C3dParseError> {
+    pub(super) fn parse_data(mut self) -> Result<C3d, C3dParseError> {
         let bytes_per_point = match self.data_format {
             DataFormat::Float => 16,
             DataFormat::Integer => 8,
-            DataFormat::Unknown => {
-                return Err(C3dParseError::UnknownDataFormat);
-            }
+            DataFormat::Unknown => 0,
         };
 
-        let point_bytes_per_frame = bytes_per_point * self.points_per_frame;
+        let point_bytes_per_frame = (bytes_per_point * self.points_per_frame) as usize;
+
+        self.data_bytes = Vec::new();
+
+        if self.file.is_none() {
+            return Err(C3dParseError::FileNotOpen);
+        }
+
+        let file = self.file.as_mut().unwrap();
+        file.read_to_end(&mut self.data_bytes)
+            .map_err(|e| C3dParseError::ReadError(e))?;
+
+        let num_frames = (self.last_frame as usize - self.first_frame as usize) + 1;
+        let mut num_frames = match self.get_parameter_data("POINT", "FRAMES") {
+            Some(ParameterData::Integer(frames)) => {
+                let frames = frames.first();
+                if let Some(&frames) = frames {
+                    frames as u16 as usize
+                } else {
+                    num_frames
+                }
+            }
+            Some(ParameterData::Float(frames)) => {
+                let frames = frames.first();
+                if let Some(&frames) = frames {
+                    frames as u16 as usize
+                } else {
+                    num_frames
+                }
+            }
+            _ => num_frames,
+        };
+
+        let start_field_parameter = self.get_parameter_int_vec("TRIAL", "ACTUAL_START_FIELD");
+        let end_field_parameter = self.get_parameter_int_vec("TRIAL", "ACTUAL_END_FIELD");
+
+        if start_field_parameter.is_some() && end_field_parameter.is_some() {
+            let start_field_parameter = start_field_parameter.unwrap();
+            let end_field_parameter = end_field_parameter.unwrap();
+
+            if start_field_parameter.len() == 2 && end_field_parameter.len() == 2 {
+                let start_one = start_field_parameter.first().unwrap();
+                let start_two = start_field_parameter.last().unwrap();
+                let end_one = end_field_parameter.first().unwrap();
+                let end_two = end_field_parameter.last().unwrap();
+
+                let start_field = *start_one as u16 as usize + (*start_two as u16 * 65535) as usize;
+                let end_field = *end_one as u16 as usize + (*end_two as u16 * 65535) as usize;
+                num_frames = end_field - start_field + 1;
+            }
+        }
 
         let bytes_per_analog_point = match self.data_format {
             DataFormat::Float => 4,
             DataFormat::Integer => 2,
             DataFormat::Unknown => {
-                return Err(C3dParseError::UnknownDataFormat);
+                let estimated_analog_bytes = match self.analog_samples_per_frame {
+                    0 => 0,
+                    _ => {
+                        self.data_bytes.len()
+                            / (self.analog_samples_per_frame as usize * num_frames)
+                    }
+                };
+                match estimated_analog_bytes {
+                    2 => 2,
+                    4 => 4,
+                    _ => return Err(C3dParseError::UnknownDataFormat),
+                }
+                //return Err(C3dParseError::UnknownDataFormat);
             }
-        };
+        } as usize;
 
         let analog_bytes_per_frame =
-            bytes_per_analog_point * self.analog_samples_per_frame;
+            bytes_per_analog_point * self.analog_samples_per_frame as usize;
 
         let bytes_per_frame = point_bytes_per_frame + analog_bytes_per_frame;
 
-        let num_frames = (self.last_frame as usize - self.first_frame as usize) + 1;
+        let num_frames = match self.data_bytes.len() < num_frames * bytes_per_frame as usize {
+            true => {
+                let num_frames = self.data_bytes.len() / bytes_per_frame as usize;
+                num_frames
+            }
+            false => num_frames,
+            //return Err(C3dParseError::NotEnoughData);
+        };
 
         let mut point_data: Array3<f32> =
             Array::zeros((num_frames as usize, self.points_per_frame as usize, 3));
@@ -341,10 +523,11 @@ impl C3d {
         let mut camera_iter = cameras.iter_mut();
         let mut residual_iter = residual.iter_mut();
 
-        self.data_bytes = Vec::new();
-        self.file
-            .read_to_end(&mut self.data_bytes)
-            .map_err(|e| C3dParseError::ReadError(e))?;
+        let analog_samples_per_channel_per_frame = if self.analog_channels > 0 {
+            (self.analog_samples_per_frame / self.analog_channels) as usize
+        } else {
+            0
+        };
 
         for i in 0..num_frames {
             let start = i * bytes_per_frame as usize;
@@ -373,26 +556,26 @@ impl C3d {
                 }
                 *residual_iter.next().unwrap() = residual;
             }
-            for j in 0..self.analog_channels{
-                let start = j * bytes_per_analog_point * self.analog_samples_per_frame / self.analog_channels;
-                let end = start + bytes_per_analog_point * self.analog_samples_per_frame / self.analog_channels;
+            for j in 0..self.analog_channels as usize {
+                let start = j * bytes_per_analog_point * analog_samples_per_channel_per_frame;
+                let end = start + bytes_per_analog_point * analog_samples_per_channel_per_frame;
                 let analog_slice = &analog_frame_data[start as usize..end as usize];
                 let analog_data = match self.data_format {
                     DataFormat::Float => parse_analog_data_float(
                         analog_slice,
-                        (self.analog_samples_per_frame / self.analog_channels) as usize,
+                        analog_samples_per_channel_per_frame,
                         &self.processor_type,
                     ),
                     DataFormat::Integer => parse_analog_data_int(
                         analog_slice,
-                        (self.analog_samples_per_frame / self.analog_channels) as usize,
+                        analog_samples_per_channel_per_frame,
                         &self.processor_type,
                     ),
                     DataFormat::Unknown => {
                         return Err(C3dParseError::UnknownDataFormat);
                     }
                 };
-                for k in 0..self.analog_samples_per_frame / self.analog_channels {
+                for k in 0..analog_samples_per_channel_per_frame {
                     *analog_iter.next().unwrap() = analog_data[k as usize];
                 }
             }
@@ -400,88 +583,43 @@ impl C3d {
 
         Ok(self)
     }
-
-    pub fn from_file(file_name: &str) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::blank(file_name)?
-            .parse_basic_info()?
-            .parse_header()?
-            .parse_parameters()?
-            .parse_data()?;
-
-        Ok(c3d)
-    }
-
-    pub fn header(file_name: &str) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::blank(file_name)?.parse_basic_info()?.parse_header()?;
-
-        Ok(c3d)
-    }
-
-    pub fn parameters(file_name: &str) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::blank(file_name)?
-            .parse_basic_info()?
-            .parse_header()?
-            .parse_parameters()?;
-
-        Ok(c3d)
-    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_parse_advanced_realtime_tracking() {
-        // Advanced Realtime Tracking GmbH
-        assert!(
-            C3d::from_file("res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample.c3d").is_ok()
-        );
-        assert!(C3d::from_file(
-            "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample-fingers.c3d"
-        )
-        .is_ok());
-    }
+#[derive(Debug, PartialEq)]
+pub enum ProcessStep {
+    MakeEmpty,
+    LoadFile,
+    ParseBasicInfo,
+    ParseHeader,
+    ParseParameters,
+    ParseData,
+    Complete,
+}
 
-    #[test]
-    fn test_parse_codamotion() {
-        // Codamotion
-        assert!(C3d::from_file("res/Sample00/Codamotion/codamotion_gaitwands_19970212.c3d").is_ok());
-        assert!(C3d::from_file("res/Sample00/Codamotion/codamotion_gaitwands_20150204.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_cometa() {
-        // Cometa
-        assert!(C3d::from_file("res/Sample00/Cometa Systems/EMG Data Cometa.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_innovative_sports_training() {
-        // Innovative Sports Training
-        assert!(C3d::from_file("res/Sample00/Innovative Sports Training/Gait with EMG.c3d").is_ok());
-        assert!(C3d::from_file("res/Sample00/Innovative Sports Training/Static Pose.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_motion_analysis_corporation() {
-        // Motion Analysis Corporation
-        assert!(C3d::from_file("res/Sample00/Motion Analysis Corporation/Sample_Jump2.c3d").is_ok());
-        assert!(C3d::from_file("res/Sample00/Motion Analysis Corporation/Walk1.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_nexgen_ergonomics() {
-        // NexGen Ergonomics
-        assert!(C3d::from_file("res/Sample00/NexGen Ergonomics/test1.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_vicon_motion_systems() {
-        // Vicon Motion Systems
-        assert!(C3d::from_file("res/Sample00/Vicon Motion Systems/TableTennis.c3d").is_ok());
-        assert!(C3d::from_file(
-            "res/Sample00/Vicon Motion Systems/pyCGM2 lower limb CGM24 Walking01.c3d"
-        )
-        .is_ok());
-    }
+pub fn test_load_file(file_name: &str) -> ProcessStep {
+    let c3d = match C3d::empty() {
+        Ok(c3d) => c3d,
+        Err(_) => return ProcessStep::MakeEmpty,
+    };
+    let c3d = match c3d.open_file(file_name) {
+        Ok(c3d) => c3d,
+        Err(_) => return ProcessStep::LoadFile,
+    };
+    let c3d = match c3d.parse_basic_info() {
+        Ok(c3d) => c3d,
+        Err(_) => return ProcessStep::ParseBasicInfo,
+    };
+    let c3d = match c3d.parse_header() {
+        Ok(c3d) => c3d,
+        Err(_) => return ProcessStep::ParseHeader,
+    };
+    let c3d = match c3d.parse_parameters() {
+        Ok(c3d) => c3d,
+        Err(_) => return ProcessStep::ParseParameters,
+    };
+    match c3d.parse_data() {
+        Ok(c3d) => c3d,
+        Err(_) => return ProcessStep::ParseData,
+    };
+    ProcessStep::Complete
 }

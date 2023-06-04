@@ -1,4 +1,4 @@
-use crate::parse::C3dParseError;
+use crate::C3dParseError;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ProcessorType {
@@ -8,7 +8,9 @@ pub enum ProcessorType {
     Unknown,
 }
 
-pub fn get_processor_type(first_parameter_block: [u8; 512]) -> Result<ProcessorType, C3dParseError> {
+pub fn get_processor_type(
+    first_parameter_block: [u8; 512],
+) -> Result<ProcessorType, C3dParseError> {
     match first_parameter_block[3] {
         0x54 => Ok(ProcessorType::Intel),
         0x55 => Ok(ProcessorType::Dec),

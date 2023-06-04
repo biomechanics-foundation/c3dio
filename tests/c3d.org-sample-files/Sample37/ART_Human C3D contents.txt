@@ -1,0 +1,6 @@
+File created by Advanced Realtime Tracking GmbH & Co., KG Am Oeferl 6, 82362 Weilheim  Germany
+
+ART-Human_real.c3d : 1 person; floating point coordinates, 3 points per joint
+ART-Human_2persons_integer.c3d : 2 persons; integer coordinates, 3 points per joint
+ART-Human_tools_integer_6dofLimbs.c3d : 1 person, 2 tools; integer coordinates, 1 point per joint, 3 points per limb
+ART-Human_hands_real_no6dof.c3d : 1 person with fingers, floating point coordinates, 1 point per joint

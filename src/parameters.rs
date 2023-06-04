@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
-use crate::c3d::C3d;
-use crate::data::DataFormat;
-use crate::parse::C3dParseError;
-use crate::processor::{bytes_to_f32, bytes_to_i16, ProcessorType};
-use ndarray::{Array, ArrayView, Axis, IxDyn, Order};
+use crate::C3dParseError;
+use crate::processor::{bytes_to_f32, bytes_to_u16, bytes_to_i16, ProcessorType};
+use ndarray::{Array, ArrayView, IxDyn, Order};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum DataType {
@@ -47,6 +45,10 @@ pub enum ParameterData {
     Float(Array<f32, IxDyn>),
 }
 
+pub enum CharParameterData {
+    Char(Array<char, IxDyn>),
+}
+
 impl From<Array<char, IxDyn>> for ParameterData {
     fn from(array: Array<char, IxDyn>) -> Self {
         ParameterData::Char(array)
@@ -72,10 +74,6 @@ impl From<Array<f32, IxDyn>> for ParameterData {
 }
 
 impl ParameterData {
-    pub(super) fn blank() -> Self {
-        ParameterData::Char(Array::from_shape_vec(IxDyn(&[0]), vec![]).unwrap())
-    }
-
     fn new(
         data: &[u8],
         data_type: DataType,
@@ -156,155 +154,6 @@ impl ParameterData {
 }
 
 #[derive(Debug, Clone)]
-struct Parameters {
-    groups: Vec<Group>,
-    parameters: Vec<Parameter>,
-}
-
-impl Parameters {
-    pub(super) fn blank() -> Self {
-        Parameters {
-            groups: vec![],
-            parameters: vec![],
-        }
-    }
-
-    fn get_group(&self, group_name: &str) -> Option<&Group> {
-        self.groups.iter().find(|&x| x.name == group_name)
-    }
-    fn get_parameter(&self, group_name: &str, parameter_name: &str) -> Option<&Parameter> {
-        let group = self.get_group(group_name)?;
-        self.parameters
-            .iter()
-            .find(|&x| x.name == parameter_name && x.group_id == group.id)
-    }
-    pub fn get_parameter_data(
-        &self,
-        group_name: &str,
-        parameter_name: &str,
-    ) -> Option<&ParameterData> {
-        let parameter = self.get_parameter(group_name, parameter_name)?;
-        Some(&parameter.data)
-    }
-
-    pub fn get_data_format(&self) -> Option<DataFormat> {
-        let data = self.get_parameter_data("POINT", "SCALE");
-        if let Some(ParameterData::Float(array)) = data {
-            let scale = array.first();
-            if let Some(&scale) = scale {
-                if scale < 0.0 {
-                    return Some(DataFormat::Float);
-                } else {
-                    return Some(DataFormat::Integer);
-                }
-            }
-        }
-        None
-    }
-
-    pub fn get_num_frames(&self) -> Option<usize> {
-        let data = self.get_parameter_data("POINT", "FRAMES");
-        if let Some(ParameterData::Integer(array)) = data {
-            let frames = array.first();
-            if let Some(&frames) = frames {
-                return Some(frames as usize);
-            }
-        }
-        None
-    }
-
-    pub fn get_num_points(&self) -> Option<usize> {
-        let data = self.get_parameter_data("POINT", "USED");
-        if let Some(ParameterData::Integer(array)) = data {
-            let points = array.first();
-            if let Some(&points) = points {
-                return Some(points as usize);
-            }
-        }
-        None
-    }
-
-    pub fn get_point_labels(&self) -> Option<Vec<String>> {
-        let data = self.get_parameter_data("POINT", "LABELS");
-        if let Some(ParameterData::Char(array)) = data {
-            let labels = array
-                .axis_iter(Axis(1))
-                .map(|x| x.into_iter().collect::<String>())
-                .collect::<Vec<String>>();
-            return Some(labels);
-        }
-        None
-    }
-
-    pub fn get_point_scale(&self) -> Option<f32> {
-        let data = self.get_parameter_data("POINT", "SCALE");
-        if let Some(ParameterData::Float(array)) = data {
-            let scale = array.first();
-            if let Some(&scale) = scale {
-                return Some(scale);
-            }
-        }
-        None
-    }
-
-    pub fn get_point_rate(&self) -> Option<f32> {
-        let data = self.get_parameter_data("POINT", "RATE");
-        if let Some(ParameterData::Float(array)) = data {
-            let rate = array.first();
-            if let Some(&rate) = rate {
-                return Some(rate);
-            }
-        }
-        None
-    }
-
-    pub fn get_num_analog_channels(&self) -> Option<usize> {
-        let data = self.get_parameter_data("ANALOG", "USED");
-        if let Some(ParameterData::Integer(array)) = data {
-            let channels = array.first();
-            if let Some(&channels) = channels {
-                return Some(channels as usize);
-            }
-        }
-        None
-    }
-
-    pub fn get_analog_labels(&self) -> Option<Vec<String>> {
-        let data = self.get_parameter_data("ANALOG", "LABELS");
-        if let Some(ParameterData::Char(array)) = data {
-            let labels = array
-                .axis_iter(Axis(1))
-                .map(|x| x.into_iter().collect::<String>())
-                .collect::<Vec<String>>();
-            return Some(labels);
-        }
-        None
-    }
-
-    pub fn get_analog_sample_rate(&self) -> Option<f32> {
-        let data = self.get_parameter_data("ANALOG", "RATE");
-        if let Some(ParameterData::Float(array)) = data {
-            let rate = array.first();
-            if let Some(&rate) = rate {
-                return Some(rate);
-            }
-        }
-        None
-    }
-
-    pub fn get_analog_scale(&self) -> Option<f32> {
-        let data = self.get_parameter_data("ANALOG", "SCALE");
-        if let Some(ParameterData::Float(array)) = data {
-            let scale = array.first();
-            if let Some(&scale) = scale {
-                return Some(scale);
-            }
-        }
-        None
-    }
-}
-
-#[derive(Debug, Clone)]
 struct Group {
     id: i8,
     name: String,
@@ -324,8 +173,7 @@ pub fn parse_parameter_blocks(
     processor_type: &ProcessorType,
 ) -> Result<
     (
-        HashMap<String, HashMap<String, ParameterData>>,
-        HashMap<String, String>,
+        HashMap<String, HashMap<String, (ParameterData, String)>>,
         HashMap<String, String>,
     ),
     C3dParseError,
@@ -350,7 +198,6 @@ pub fn parse_parameter_blocks(
     }
     let mut groups_map = HashMap::new();
     let mut group_descriptions = HashMap::new();
-    let mut parameter_descriptions = HashMap::new();
     let mut temp_group_id_to_name = HashMap::new();
     for group in groups {
         temp_group_id_to_name.insert(group.id, group.name.clone());
@@ -358,29 +205,34 @@ pub fn parse_parameter_blocks(
         group_descriptions.insert(group.name, group.description);
     }
     for parameter in parameters {
-        let group_name = temp_group_id_to_name.get(&parameter.group_id);
-        if let Some(group_name) = group_name {
+        let group_name = match temp_group_id_to_name.contains_key(&parameter.group_id) {
+            true => temp_group_id_to_name.get(&parameter.group_id).unwrap().clone(),
+            false => {
+                temp_group_id_to_name
+                    .insert(parameter.group_id, parameter.group_id.to_string());
+                groups_map.insert(parameter.group_id.to_string(), HashMap::new());
+                parameter.group_id.to_string()
+            }
+        };
             groups_map
-                .get_mut(group_name)
+                .get_mut(&group_name)
                 .ok_or(C3dParseError::InvalidGroupId)?
-                .insert(parameter.name.clone(), parameter.data);
-            parameter_descriptions.insert(parameter.name, parameter.description);
-
-        }
-        else {
-            return Err(C3dParseError::InvalidGroupId);
-        }
+                .insert(parameter.name.clone(), (parameter.data, parameter.description));
     }
-    Ok((groups_map, group_descriptions, parameter_descriptions))
+    Ok((groups_map, group_descriptions))
 }
 
 fn parse_next_group_or_parameter(
-    parameter_blocks: &[u8],
+    parameter_blocks: &Vec<u8>,
     index: usize,
     groups: &mut Vec<Group>,
     parameters: &mut Vec<Parameter>,
     processor_type: &ProcessorType,
 ) -> Result<usize, C3dParseError> {
+    if index + 1 >= parameter_blocks.len() {
+        return Ok(0)
+        //return Err(C3dParseError::InvalidNextParameter);
+    }
     let group_id = parameter_blocks[index + 1] as i8;
 
     if group_id == 0 {
@@ -397,10 +249,10 @@ fn parse_next_group_or_parameter(
 }
 
 fn parse_group(
-    parameter_blocks: &[u8],
+    parameter_blocks: &Vec<u8>,
     index: usize,
     processor_type: &ProcessorType,
-) -> Result<(Group, u16), C3dParseError> {
+) -> Result<(Group, usize), C3dParseError> {
     let mut i = index;
     let num_chars_in_name = parameter_blocks[i] as i8;
     i += 1;
@@ -410,7 +262,7 @@ fn parse_group(
     i += num_chars_in_name.abs() as usize;
     let next_group_index_bytes = &parameter_blocks[i..i + 2];
     let next_group_index =
-        bytes_to_i16(next_group_index_bytes.try_into().unwrap(), processor_type) as u16 + i as u16;
+        bytes_to_u16(next_group_index_bytes.try_into().unwrap(), processor_type) as usize + i as usize;
     i += 2;
     let num_chars_in_description = parameter_blocks[i];
     i += 1;
@@ -422,12 +274,12 @@ fn parse_group(
             name,
             description,
         },
-        next_group_index as u16,
+        next_group_index,
     ))
 }
 
 fn parse_group_name(
-    parameter_blocks: &[u8],
+    parameter_blocks: &Vec<u8>,
     index: usize,
     num_chars_in_name: i8,
 ) -> Result<String, C3dParseError> {
@@ -441,7 +293,7 @@ fn parse_group_name(
 }
 
 fn parse_description(
-    parameter_blocks: &[u8],
+    parameter_blocks: &Vec<u8>,
     index: usize,
     num_chars_in_description: u8,
 ) -> Result<String, C3dParseError> {
@@ -455,10 +307,10 @@ fn parse_description(
 }
 
 fn parse_parameter(
-    parameter_blocks: &[u8],
+    parameter_blocks: &Vec<u8>,
     index: usize,
     processor_type: &ProcessorType,
-) -> Result<(Parameter, u16), C3dParseError> {
+) -> Result<(Parameter, usize), C3dParseError> {
     let mut i = index;
     let num_chars_in_name = parameter_blocks[i] as i8;
     i += 1;
@@ -466,9 +318,9 @@ fn parse_parameter(
     i += 1;
     let name = parse_parameter_name(&parameter_blocks, i, num_chars_in_name)?;
     i += num_chars_in_name.abs() as usize;
-    let next_group_index_bytes = &parameter_blocks[i..i + 2];
-    let next_group_index =
-        bytes_to_i16(next_group_index_bytes.try_into().unwrap(), processor_type) as u16 + i as u16;
+    let next_index_bytes = &parameter_blocks[i..i + 2];
+    let next_index =
+        bytes_to_u16(next_index_bytes.try_into().unwrap(), processor_type) as usize + i as usize;
     i += 2;
     let data_type = DataType::try_from(parameter_blocks[i] as i8)?;
     i += 1;
@@ -490,7 +342,7 @@ fn parse_parameter(
             data,
             description,
         },
-        next_group_index,
+        next_index,
     ))
 }
 
@@ -523,7 +375,7 @@ fn parse_dimensions(
 }
 
 fn parse_data(
-    parameter_blocks: &[u8],
+    parameter_blocks: &Vec<u8>,
     index: usize,
     dimensions: &Vec<u8>,
     data_type: DataType,
@@ -537,6 +389,10 @@ fn parse_data(
 
     let data_byte_size = dimensions_product * usize::from(data_type);
 
+    if index + data_byte_size > parameter_blocks.len() {
+        return Err(C3dParseError::InvalidParameterData);
+    }
+
     let bytes: &[u8] = &parameter_blocks[index..index + data_byte_size];
     let dimensions: &[usize] = &dimensions
         .iter()
@@ -549,76 +405,3 @@ fn parse_data(
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_parameters() {
-        let parameters = C3d::parameters("res/Sample01/Eb015si.c3d");
-        assert!(parameters.is_ok());
-    }
-    #[test]
-    fn test_parse_advanced_realtime_tracking() {
-        // Advanced Realtime Tracking GmbH
-        assert!(C3d::parameters(
-            "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample.c3d"
-        )
-        .is_ok());
-        assert!(C3d::parameters(
-            "res/Sample00/Advanced Realtime Tracking GmbH/arthuman-sample-fingers.c3d"
-        )
-        .is_ok());
-    }
-
-    #[test]
-    fn test_parse_codamotion() {
-        // Codamotion
-        assert!(
-            C3d::parameters("res/Sample00/Codamotion/codamotion_gaitwands_19970212.c3d").is_ok()
-        );
-        assert!(
-            C3d::parameters("res/Sample00/Codamotion/codamotion_gaitwands_20150204.c3d").is_ok()
-        );
-    }
-
-    #[test]
-    fn test_parse_cometa() {
-        // Cometa
-        assert!(C3d::parameters("res/Sample00/Cometa Systems/EMG Data Cometa.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_innovative_sports_training() {
-        // Innovative Sports Training
-        assert!(
-            C3d::parameters("res/Sample00/Innovative Sports Training/Gait with EMG.c3d").is_ok()
-        );
-        assert!(C3d::parameters("res/Sample00/Innovative Sports Training/Static Pose.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_motion_analysis_corporation() {
-        // Motion Analysis Corporation
-        assert!(
-            C3d::parameters("res/Sample00/Motion Analysis Corporation/Sample_Jump2.c3d").is_ok()
-        );
-        assert!(C3d::parameters("res/Sample00/Motion Analysis Corporation/Walk1.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_nexgen_ergonomics() {
-        // NexGen Ergonomics
-        assert!(C3d::parameters("res/Sample00/NexGen Ergonomics/test1.c3d").is_ok());
-    }
-
-    #[test]
-    fn test_parse_vicon_motion_systems() {
-        // Vicon Motion Systems
-        assert!(C3d::parameters("res/Sample00/Vicon Motion Systems/TableTennis.c3d").is_ok());
-        assert!(C3d::parameters(
-            "res/Sample00/Vicon Motion Systems/pyCGM2 lower limb CGM24 Walking01.c3d"
-        )
-        .is_ok());
-    }
-}

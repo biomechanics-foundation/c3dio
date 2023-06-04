@@ -1,16 +1,12 @@
 [package]
-name = "silico-c3d"
+name = "c3dio"
 version = "0.1.0"
 edition = "2021"
+exclude = ["tests", "tests/*", "examples", "examples/*"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ndarray = "0.15.6"
 
-[lib]
-path = "src/lib.rs"
 
-[[bin]]
-path = "src/main.rs"
-name = "silico-c3d"
