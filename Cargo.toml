@@ -9,4 +9,7 @@ exclude = ["tests", "tests/*", "examples", "examples/*"]
 [dependencies]
 ndarray = "0.15.6"
 
+[[bin]]
+name = "c3dio"
+path = "src/main.rs"
 

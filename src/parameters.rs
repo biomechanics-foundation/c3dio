@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
+use crate::processor::Processor;
 use crate::C3dParseError;
-use crate::processor::{bytes_to_f32, bytes_to_u16, bytes_to_i16, ProcessorType};
 use ndarray::{Array, ArrayView, IxDyn, Order};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -78,7 +78,7 @@ impl ParameterData {
         data: &[u8],
         data_type: DataType,
         dimensions: &[usize],
-        processor_type: &ProcessorType,
+        processor: &Processor,
     ) -> Result<Self, C3dParseError> {
         if data.len() % usize::from(data_type) != 0 {
             return Err(C3dParseError::InvalidParameterData);
@@ -118,7 +118,7 @@ impl ParameterData {
             DataType::Integer => {
                 let data = data
                     .chunks(2)
-                    .map(|x| bytes_to_i16(x.try_into().unwrap(), processor_type))
+                    .map(|x| processor.i16(x.try_into().unwrap()))
                     .collect::<Vec<i16>>();
                 let array = ArrayView::<i16, IxDyn>::from_shape(
                     IxDyn(vec![data.len()].as_slice()),
@@ -134,7 +134,7 @@ impl ParameterData {
             DataType::Float => {
                 let data = data
                     .chunks(4)
-                    .map(|x| bytes_to_f32(x.try_into().unwrap(), processor_type))
+                    .map(|x| processor.f32(x.try_into().unwrap()))
                     .collect::<Vec<f32>>();
                 let array = ArrayView::<f32, IxDyn>::from_shape(
                     IxDyn(vec![data.len()].as_slice()),
@@ -170,7 +170,7 @@ struct Parameter {
 
 pub fn parse_parameter_blocks(
     parameter_blocks: &Vec<u8>,
-    processor_type: &ProcessorType,
+    processor: &Processor,
 ) -> Result<
     (
         HashMap<String, HashMap<String, (ParameterData, String)>>,
@@ -193,7 +193,7 @@ pub fn parse_parameter_blocks(
             index,
             &mut groups,
             &mut parameters,
-            processor_type,
+            processor,
         )?;
     }
     let mut groups_map = HashMap::new();
@@ -206,18 +206,23 @@ pub fn parse_parameter_blocks(
     }
     for parameter in parameters {
         let group_name = match temp_group_id_to_name.contains_key(&parameter.group_id) {
-            true => temp_group_id_to_name.get(&parameter.group_id).unwrap().clone(),
+            true => temp_group_id_to_name
+                .get(&parameter.group_id)
+                .unwrap()
+                .clone(),
             false => {
-                temp_group_id_to_name
-                    .insert(parameter.group_id, parameter.group_id.to_string());
+                temp_group_id_to_name.insert(parameter.group_id, parameter.group_id.to_string());
                 groups_map.insert(parameter.group_id.to_string(), HashMap::new());
                 parameter.group_id.to_string()
             }
         };
-            groups_map
-                .get_mut(&group_name)
-                .ok_or(C3dParseError::InvalidGroupId)?
-                .insert(parameter.name.clone(), (parameter.data, parameter.description));
+        groups_map
+            .get_mut(&group_name)
+            .ok_or(C3dParseError::InvalidGroupId)?
+            .insert(
+                parameter.name.clone(),
+                (parameter.data, parameter.description),
+            );
     }
     Ok((groups_map, group_descriptions))
 }
@@ -227,10 +232,10 @@ fn parse_next_group_or_parameter(
     index: usize,
     groups: &mut Vec<Group>,
     parameters: &mut Vec<Parameter>,
-    processor_type: &ProcessorType,
+    processor: &Processor,
 ) -> Result<usize, C3dParseError> {
     if index + 1 >= parameter_blocks.len() {
-        return Ok(0)
+        return Ok(0);
         //return Err(C3dParseError::InvalidNextParameter);
     }
     let group_id = parameter_blocks[index + 1] as i8;
@@ -238,11 +243,11 @@ fn parse_next_group_or_parameter(
     if group_id == 0 {
         return Ok(0);
     } else if group_id < 0 {
-        let (group, next_index) = parse_group(&parameter_blocks, index, processor_type)?;
+        let (group, next_index) = parse_group(&parameter_blocks, index, processor)?;
         groups.push(group);
         Ok(next_index as usize)
     } else {
-        let (parameter, next_index) = parse_parameter(&parameter_blocks, index, processor_type)?;
+        let (parameter, next_index) = parse_parameter(&parameter_blocks, index, processor)?;
         parameters.push(parameter);
         Ok(next_index as usize)
     }
@@ -251,7 +256,7 @@ fn parse_next_group_or_parameter(
 fn parse_group(
     parameter_blocks: &Vec<u8>,
     index: usize,
-    processor_type: &ProcessorType,
+    processor: &Processor,
 ) -> Result<(Group, usize), C3dParseError> {
     let mut i = index;
     let num_chars_in_name = parameter_blocks[i] as i8;
@@ -262,7 +267,7 @@ fn parse_group(
     i += num_chars_in_name.abs() as usize;
     let next_group_index_bytes = &parameter_blocks[i..i + 2];
     let next_group_index =
-        bytes_to_u16(next_group_index_bytes.try_into().unwrap(), processor_type) as usize + i as usize;
+        processor.u16(next_group_index_bytes.try_into().unwrap()) as usize + i as usize;
     i += 2;
     let num_chars_in_description = parameter_blocks[i];
     i += 1;
@@ -309,7 +314,7 @@ fn parse_description(
 fn parse_parameter(
     parameter_blocks: &Vec<u8>,
     index: usize,
-    processor_type: &ProcessorType,
+    processor: &Processor,
 ) -> Result<(Parameter, usize), C3dParseError> {
     let mut i = index;
     let num_chars_in_name = parameter_blocks[i] as i8;
@@ -319,8 +324,7 @@ fn parse_parameter(
     let name = parse_parameter_name(&parameter_blocks, i, num_chars_in_name)?;
     i += num_chars_in_name.abs() as usize;
     let next_index_bytes = &parameter_blocks[i..i + 2];
-    let next_index =
-        bytes_to_u16(next_index_bytes.try_into().unwrap(), processor_type) as usize + i as usize;
+    let next_index = processor.u16(next_index_bytes.try_into().unwrap()) as usize + i as usize;
     i += 2;
     let data_type = DataType::try_from(parameter_blocks[i] as i8)?;
     i += 1;
@@ -329,7 +333,7 @@ fn parse_parameter(
     let dimensions = parse_dimensions(&parameter_blocks, i, num_dimensions)?;
     i += num_dimensions as usize;
     let (data, data_byte_size) =
-        parse_data(&parameter_blocks, i, &dimensions, data_type, processor_type)?;
+        parse_data(&parameter_blocks, i, &dimensions, data_type, processor)?;
     i += data_byte_size;
     let num_chars_in_description = parameter_blocks[i];
     i += 1;
@@ -379,7 +383,7 @@ fn parse_data(
     index: usize,
     dimensions: &Vec<u8>,
     data_type: DataType,
-    processor_type: &ProcessorType,
+    processor: &Processor,
 ) -> Result<(ParameterData, usize), C3dParseError> {
     let dimensions_product = &dimensions
         .clone()
@@ -400,8 +404,7 @@ fn parse_data(
         .collect::<Vec<usize>>();
 
     Ok((
-        ParameterData::new(bytes, data_type, dimensions, processor_type)?,
+        ParameterData::new(bytes, data_type, dimensions, processor)?,
         data_byte_size,
     ))
 }
-

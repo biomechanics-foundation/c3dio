@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 #[path = "c3d.rs"]
 pub mod c3d;
-
+#[path = "events.rs"]
+pub mod events;
 #[path = "data.rs"]
 pub mod data;
 #[path = "parameters.rs"]
@@ -13,10 +14,10 @@ pub mod parameters;
 #[path = "processor.rs"]
 pub mod processor;
 
-use c3d::Events;
 use data::DataFormat;
 use parameters::ParameterData;
-use processor::ProcessorType;
+use processor::Processor;
+use events::Events;
 
 #[derive(Debug)]
 pub enum C3dParseError {
@@ -37,6 +38,7 @@ pub enum C3dParseError {
     FileNotOpen,
     NotEnoughData,
     InvalidNextParameter,
+    TooManyEvents(usize),
 }
 
 #[derive(Debug)]
@@ -48,6 +50,7 @@ pub struct C3d {
     pub parameters: HashMap<String, HashMap<String, (ParameterData, String)>>,
     pub group_descriptions: HashMap<String, String>,
     pub parameter_start_block_index: usize,
+    pub num_frames: usize,
     pub points: Array3<f32>,
     pub point_labels: Vec<String>,
     pub cameras: Array3<bool>,
@@ -59,7 +62,7 @@ pub struct C3d {
     pub data_format: DataFormat,
     pub data_bytes: Vec<u8>,
     pub data_start_block_index: usize,
-    pub processor_type: ProcessorType,
+    pub processor: Processor,
     pub points_per_frame: u16,
     pub first_frame: u16,
     pub last_frame: u16,
