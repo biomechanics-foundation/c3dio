@@ -78,7 +78,15 @@ fn intel_i16(bytes: [u8; 2]) -> i16 {
 }
 
 fn dec_i16(bytes: [u8; 2]) -> i16 {
-    i16::from_le_bytes(bytes)
+//    if bytes[1] == 0x00 || bytes[1] == 7 || bytes[1] == 255 {
+//        if bytes[0] == 0x00 {
+//            return 0;
+//        }
+//        i16::from_le_bytes([bytes[0]-1, bytes[1]])
+//    }
+//    else {
+        i16::from_le_bytes(bytes)
+//    }
 }
 
 fn sgi_mips_i16(bytes: [u8; 2]) -> i16 {

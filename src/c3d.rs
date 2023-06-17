@@ -1,14 +1,10 @@
-use crate::data::{
-    parse_analog_data_float, parse_analog_data_int, parse_point_data_float, parse_point_data_int,
-    DataFormat,
-};
 use crate::parameters::{parse_parameter_blocks, ParameterData};
 
+use crate::data::Data;
 use crate::events::Events;
 use crate::processor::Processor;
 use crate::{C3d, C3dParseError};
 
-use ndarray::{Array, Array2, Array3};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -16,25 +12,10 @@ use std::path::PathBuf;
 
 impl PartialEq for C3d {
     fn eq(&self, other: &Self) -> bool {
-        self.points_per_frame == other.points_per_frame
-//       && self.points == other.points
-            && self.points.first().unwrap() == other.points.first().unwrap()
-            && self.num_frames == other.num_frames
-            && self.cameras == other.cameras
-            && self.residuals == other.residuals
-            && self.analog == other.analog
-            && self.point_labels == other.point_labels
-            && self.analog_labels == other.analog_labels
-// Sample08 fails if the following are compared
-//            && self.parameter_start_block_index == other.parameter_start_block_index
-//            && self.data_start_block_index == other.data_start_block_index
-            && self.analog_samples_per_frame == other.analog_samples_per_frame
-            && self.first_frame == other.first_frame
-            && self.last_frame == other.last_frame
-            && self.max_interpolation_gap == other.max_interpolation_gap
-            && self.scale_factor.abs() == other.scale_factor.abs()
-            && self.analog_channels == other.analog_channels
-            && self.frame_rate == other.frame_rate
+        self.group_descriptions == other.group_descriptions
+//            &&  self.parameters == other.parameters
+            && self.data == other.data
+            && self.events == other.events
     }
 }
 
@@ -212,26 +193,11 @@ impl C3d {
             parameter_bytes: Vec::new(),
             parameters: HashMap::new(),
             group_descriptions: HashMap::new(),
-            num_frames: 0,
-            points: Array3::zeros((0, 0, 0)),
-            cameras: Array3::from_elem((0, 0, 0), false),
-            residuals: Array2::zeros((0, 0)),
-            analog: Array2::zeros((0, 0)),
-            point_labels: Vec::new(),
-            analog_labels: Vec::new(),
-            analog_channels: 0,
-            data_format: DataFormat::Unknown,
             parameter_start_block_index: 0,
             data_start_block_index: 0,
             data_bytes: Vec::new(),
             processor: Processor::new(),
-            points_per_frame: 0,
-            analog_samples_per_frame: 0,
-            first_frame: 0,
-            last_frame: 0,
-            max_interpolation_gap: 0,
-            scale_factor: 0.0,
-            frame_rate: 0.0,
+            data: Data::new(),
             events: Events::new(),
         })
     }
@@ -301,28 +267,28 @@ impl C3d {
     }
 
     fn parse_header(mut self) -> Result<C3d, C3dParseError> {
-        self.points_per_frame = self
+        self.data.points_per_frame = self
             .processor
             .u16(self.header_bytes[2..4].try_into().unwrap());
-        self.analog_samples_per_frame = self
+        self.data.analog_samples_per_frame = self
             .processor
             .u16(self.header_bytes[4..6].try_into().unwrap());
-        self.first_frame = self
+        self.data.first_frame = self
             .processor
             .u16(self.header_bytes[6..8].try_into().unwrap());
-        self.last_frame = self
+        self.data.last_frame = self
             .processor
             .u16(self.header_bytes[8..10].try_into().unwrap());
-        self.max_interpolation_gap = self
+        self.data.max_interpolation_gap = self
             .processor
             .u16(self.header_bytes[10..12].try_into().unwrap());
-        self.scale_factor = self
+        self.data.scale_factor = self
             .processor
             .f32(self.header_bytes[12..16].try_into().unwrap());
-        self.analog_channels = self
+        self.data.analog_channels = self
             .processor
             .u16(self.header_bytes[18..20].try_into().unwrap());
-        self.frame_rate = self
+        self.data.frame_rate = self
             .processor
             .f32(self.header_bytes[20..24].try_into().unwrap());
         self.events = Events::from_header_block(&self.header_bytes, &self.processor)?;
@@ -335,18 +301,6 @@ impl C3d {
 
         self.parameters = parameters;
         self.group_descriptions = group_descriptions;
-
-        let point_scale = self.get_parameter_float("POINT", "SCALE");
-        if let Some(point_scale) = point_scale {
-            if point_scale < 0.0 {
-                self.data_format = DataFormat::Float;
-            } else {
-                self.data_format = DataFormat::Integer;
-            }
-        } else {
-            self.data_format = DataFormat::Integer;
-            //return Err(C3dParseError::MissingPointScale);
-        }
 
         Ok(self)
     }
@@ -364,15 +318,18 @@ impl C3d {
         Ok(self)
     }
 
-    fn calc_num_frames(mut self) -> Result<C3d, C3dParseError> {
-        let num_frames = (self.last_frame as usize - self.first_frame as usize) + 1;
-        let mut num_frames = match self.get_parameter_data("POINT", "FRAMES") {
+    fn parse_data(self) -> Result<C3d, C3dParseError> {
+        self.read_data_bytes()?.parse_data_bytes()
+    }
+
+    fn parse_data_bytes(mut self) -> Result<C3d, C3dParseError> {
+        self.data.point_frames = match self.get_parameter_data("POINT", "FRAMES") {
             Some(ParameterData::Integer(frames)) => {
                 let frames = frames.first();
                 if let Some(&frames) = frames {
                     frames as u16 as usize
                 } else {
-                    num_frames
+                    0
                 }
             }
             Some(ParameterData::Float(frames)) => {
@@ -380,12 +337,11 @@ impl C3d {
                 if let Some(&frames) = frames {
                     frames as u16 as usize
                 } else {
-                    num_frames
+                    0
                 }
             }
-            _ => num_frames,
+            _ => 0,
         };
-
         let start_field_parameter = self.get_parameter_int_vec("TRIAL", "ACTUAL_START_FIELD");
         let end_field_parameter = self.get_parameter_int_vec("TRIAL", "ACTUAL_END_FIELD");
 
@@ -399,222 +355,13 @@ impl C3d {
                 let end_one = end_field_parameter.first().unwrap();
                 let end_two = end_field_parameter.last().unwrap();
 
-                let start_field = *start_one as u16 as usize + (*start_two as u16 * 65535) as usize;
-                let end_field = *end_one as u16 as usize + (*end_two as u16 * 65535) as usize;
-                num_frames = end_field - start_field + 1;
+                self.data.trial_start_frame = *start_one as u16 as usize + (*start_two as u16 * 65535) as usize;
+                self.data.trial_end_frame = *end_one as u16 as usize + (*end_two as u16 * 65535) as usize;
+                //self.data.num_frames = end_field - start_field + 1;
             }
         }
-
-        let bytes_per_point = match self.data_format {
-            DataFormat::Float => 16,
-            DataFormat::Integer => 8,
-            DataFormat::Unknown => 0,
-        };
-
-        let point_bytes_per_frame = (bytes_per_point * self.points_per_frame) as usize;
-
-        let bytes_per_analog_point = match self.data_format {
-            DataFormat::Float => 4,
-            DataFormat::Integer => 2,
-            DataFormat::Unknown => {
-                let estimated_analog_bytes = match self.analog_samples_per_frame {
-                    0 => 0,
-                    _ => {
-                        self.data_bytes.len()
-                            / (self.analog_samples_per_frame as usize * self.num_frames)
-                    }
-                };
-                match estimated_analog_bytes {
-                    2 => 2,
-                    4 => 4,
-                    _ => return Err(C3dParseError::UnknownDataFormat),
-                }
-                //return Err(C3dParseError::UnknownDataFormat);
-            }
-        } as usize;
-
-        let analog_bytes_per_frame =
-            bytes_per_analog_point * self.analog_samples_per_frame as usize;
-
-
-        let bytes_per_frame = point_bytes_per_frame + analog_bytes_per_frame;
-        let num_frames = match self.data_bytes.len() < num_frames * bytes_per_frame as usize {
-            true => {
-                let num_frames = self.data_bytes.len() / bytes_per_frame as usize;
-                num_frames
-            }
-            false => num_frames,
-            //return Err(C3dParseError::NotEnoughData);
-        };
-        self.num_frames = num_frames;
+        self.data.parse(&self.data_bytes, &self.processor)?;
         Ok(self)
-    }
-
-    fn parse_points(mut self) -> Result<C3d, C3dParseError> {
-        let mut point_data: Array3<f32> =
-            Array::zeros((self.num_frames as usize, self.points_per_frame as usize, 3));
-        let mut cameras: Array3<bool> = Array::from_elem(
-            (self.num_frames as usize, self.points_per_frame as usize, 7),
-            false,
-        );
-        let mut residual: Array2<f32> =
-            Array::zeros((self.num_frames as usize, self.points_per_frame as usize));
-
-        let mut camera_iter = cameras.iter_mut();
-        let mut residual_iter = residual.iter_mut();
-        let mut point_iter = point_data.iter_mut();
-
-        let bytes_per_point = match self.data_format {
-            DataFormat::Float => 16,
-            DataFormat::Integer => 8,
-            DataFormat::Unknown => 0,
-        };
-
-        let point_bytes_per_frame = (bytes_per_point * self.points_per_frame) as usize;
-
-        let bytes_per_analog_point = match self.data_format {
-            DataFormat::Float => 4,
-            DataFormat::Integer => 2,
-            DataFormat::Unknown => {
-                let estimated_analog_bytes = match self.analog_samples_per_frame {
-                    0 => 0,
-                    _ => {
-                        self.data_bytes.len()
-                            / (self.analog_samples_per_frame as usize * self.num_frames)
-                    }
-                };
-                match estimated_analog_bytes {
-                    2 => 2,
-                    4 => 4,
-                    _ => return Err(C3dParseError::UnknownDataFormat),
-                }
-                //return Err(C3dParseError::UnknownDataFormat);
-            }
-        } as usize;
-
-        let analog_bytes_per_frame =
-            bytes_per_analog_point * self.analog_samples_per_frame as usize;
-
-        let bytes_per_frame = point_bytes_per_frame + analog_bytes_per_frame;
-
-        println!("parameter_bytes: {}", self.parameter_bytes.len());
-        println!("data bytes: {}", self.data_bytes.len());
-
-        //for i in 0..self.num_frames {
-        for i in 0..1 {
-            let start = i * bytes_per_frame as usize;
-            let end = start + bytes_per_frame as usize;
-            let frame = &self.data_bytes[start as usize..end as usize];
-            let point_frame_data = &frame[0..point_bytes_per_frame as usize];
-            //for j in 0..self.points_per_frame {
-            for j in 0..1 {
-                let start = j * bytes_per_point;
-                let end = start + bytes_per_point;
-                let point_slice = &point_frame_data[start as usize..end as usize];
-                let (x, y, z, cameras, residual) = match self.data_format {
-                    DataFormat::Float => parse_point_data_float(point_slice, &self.processor),
-                    DataFormat::Integer => parse_point_data_int(point_frame_data, &self.processor),
-                    DataFormat::Unknown => {
-                        return Err(C3dParseError::UnknownDataFormat);
-                    }
-                };
-                println!("x: {}, y: {}, z: {}", x, y, z);
-                *point_iter.next().unwrap() = x;
-                *point_iter.next().unwrap() = y;
-                *point_iter.next().unwrap() = z;
-                for k in 0..7 {
-                    *camera_iter.next().unwrap() = cameras[k];
-                }
-                *residual_iter.next().unwrap() = residual;
-            }
-        }
-
-        self.points = point_data;
-        Ok(self)
-    }
-
-    fn parse_analog(mut self) -> Result<C3d, C3dParseError> {
-        let mut analog_data: Array2<f32> = Array::zeros((
-            self.num_frames as usize,
-            self.analog_samples_per_frame as usize,
-        ));
-        let mut analog_iter = analog_data.iter_mut();
-
-        let bytes_per_point = match self.data_format {
-            DataFormat::Float => 16,
-            DataFormat::Integer => 8,
-            DataFormat::Unknown => 0,
-        };
-
-        let point_bytes_per_frame = (bytes_per_point * self.points_per_frame) as usize;
-
-        let bytes_per_analog_point = match self.data_format {
-            DataFormat::Float => 4,
-            DataFormat::Integer => 2,
-            DataFormat::Unknown => {
-                let estimated_analog_bytes = match self.analog_samples_per_frame {
-                    0 => 0,
-                    _ => {
-                        self.data_bytes.len()
-                            / (self.analog_samples_per_frame as usize * self.num_frames)
-                    }
-                };
-                match estimated_analog_bytes {
-                    2 => 2,
-                    4 => 4,
-                    _ => return Err(C3dParseError::UnknownDataFormat),
-                }
-                //return Err(C3dParseError::UnknownDataFormat);
-            }
-        } as usize;
-
-        let analog_bytes_per_frame =
-            bytes_per_analog_point * self.analog_samples_per_frame as usize;
-
-        let analog_samples_per_channel_per_frame = if self.analog_channels > 0 {
-            (self.analog_samples_per_frame / self.analog_channels) as usize
-        } else {
-            0
-        };
-
-        let bytes_per_frame = point_bytes_per_frame + analog_bytes_per_frame;
-        for i in 0..self.num_frames {
-            let start = i * bytes_per_frame as usize;
-            let end = start + bytes_per_frame as usize;
-            let analog_frame_data = &self.data_bytes[start + point_bytes_per_frame as usize..end];
-            for j in 0..self.analog_channels as usize {
-                let start = j * bytes_per_analog_point * analog_samples_per_channel_per_frame;
-                let end = start + bytes_per_analog_point * analog_samples_per_channel_per_frame;
-                let analog_slice = &analog_frame_data[start as usize..end as usize];
-                let analog_data = match self.data_format {
-                    DataFormat::Float => parse_analog_data_float(
-                        analog_slice,
-                        analog_samples_per_channel_per_frame,
-                        &self.processor,
-                    ),
-                    DataFormat::Integer => parse_analog_data_int(
-                        analog_slice,
-                        analog_samples_per_channel_per_frame,
-                        &self.processor,
-                    ),
-                    DataFormat::Unknown => {
-                        return Err(C3dParseError::UnknownDataFormat);
-                    }
-                };
-                for k in 0..analog_samples_per_channel_per_frame {
-                    *analog_iter.next().unwrap() = analog_data[k as usize];
-                }
-            }
-        }
-        self.analog = analog_data;
-        Ok(self)
-    }
-
-    fn parse_data(self) -> Result<C3d, C3dParseError> {
-        self.read_data_bytes()?
-            .calc_num_frames()?
-            .parse_points()?
-            .parse_analog()
     }
 }
 

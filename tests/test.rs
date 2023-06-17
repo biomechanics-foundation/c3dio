@@ -1,17 +1,16 @@
 use c3dio::C3d;
 
 #[test]
-fn sample01() {
-    // Sample08: check if test files read correct pointer values from the c3d header in block 1
-    let pi = C3d::load("tests/c3d.org-sample-files/Sample01/Eb015pi.c3d").unwrap();
-    let pr = C3d::load("tests/c3d.org-sample-files/Sample01/Eb015pr.c3d").unwrap();
-//    let si = C3d::load("tests/c3d.org-sample-files/Sample01/Eb015si.c3d").unwrap();
-//    let sr = C3d::load("tests/c3d.org-sample-files/Sample01/Eb015sr.c3d").unwrap();
-//    let vi = C3d::load("tests/c3d.org-sample-files/Sample01/Eb015vi.c3d").unwrap();
-//    let vr = C3d::load("tests/c3d.org-sample-files/Sample01/Eb015vr.c3d").unwrap();
-    assert_eq!(pi, pr);
-//    assert_eq!(pi, si);
-//    assert_eq!(pi, sr);
-//    assert_eq!(pi, vi);
-//    assert_eq!(pi, vr);
+fn sample02() {
+//    let dec_int = C3d::load("tests/c3d.org-sample-files/Sample02/dec_int.c3d").unwrap();
+//    let dec_real = C3d::load("tests/c3d.org-sample-files/Sample02/dec_real.c3d").unwrap();
+//    let pc_int = C3d::load("tests/c3d.org-sample-files/Sample02/pc_int.c3d").unwrap();
+//    let pc_real = C3d::load("tests/c3d.org-sample-files/Sample02/pc_real.c3d").unwrap();
+//    let sgi_int = C3d::load("tests/c3d.org-sample-files/Sample02/sgi_int.c3d").unwrap();
+//    let sgi_real = C3d::load("tests/c3d.org-sample-files/Sample02/sgi_real.c3d").unwrap();
+//    assert_eq!(dec_int, dec_real);
+//    assert_eq!(dec_int, pc_int);
+//    assert_eq!(dec_int, pc_real);
+//    assert_eq!(dec_int, sgi_int);
+//    assert_eq!(dec_int, sgi_real);
 }

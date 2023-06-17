@@ -1,13 +1,13 @@
 use crate::processor::Processor;
 use crate::C3dParseError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Events {
     pub supports_events_labels: bool,
     events: Vec<Event>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct Event {
     pub label: [char; 4],
     pub display_flag: bool,
