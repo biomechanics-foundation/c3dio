@@ -29,19 +29,6 @@ pub struct Data {
 
 impl PartialEq for Data {
     fn eq(&self, other: &Self) -> bool {
-        dbg!(self.points.dim());
-        dbg!(other.points.dim());
-        let self_points = self.points.clone().into_raw_vec();
-        let other_points = other.points.clone().into_raw_vec();
-        for i in 0..20 {
-            println!(
-                "{}: {} == {}: {}",
-                i,
-                self_points[i],
-                other_points[i],
-                self_points[i] == other_points[i]
-            );
-        }
         self.points == other.points
             && self.point_labels == other.point_labels
             && self.cameras == other.cameras
@@ -205,7 +192,6 @@ impl Data {
 
         match self.format {
             DataFormat::Integer => {
-                dbg!("Scaling data");
                 point_data *= self.scale_factor;
                 self.points = point_data;
             }
@@ -291,7 +277,6 @@ pub fn parse_point_data_int(
     point_frame_data: &[u8],
     processor: &Processor,
 ) -> (f32, f32, f32, [bool; 7], f32) {
-    println!("point_frame_data: {:?}", point_frame_data);
     let x = processor.i16(point_frame_data[0..2].try_into().unwrap());
     let y = processor.i16(point_frame_data[2..4].try_into().unwrap());
     let z = processor.i16(point_frame_data[4..6].try_into().unwrap());

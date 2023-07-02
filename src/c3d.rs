@@ -355,8 +355,10 @@ impl C3d {
                 let end_one = end_field_parameter.first().unwrap();
                 let end_two = end_field_parameter.last().unwrap();
 
-                self.data.trial_start_frame = *start_one as u16 as usize + (*start_two as u16 * 65535) as usize;
-                self.data.trial_end_frame = *end_one as u16 as usize + (*end_two as u16 * 65535) as usize;
+                self.data.trial_start_frame =
+                    *start_one as u16 as usize + (*start_two as u16 * 65535) as usize;
+                self.data.trial_end_frame =
+                    *end_one as u16 as usize + (*end_two as u16 * 65535) as usize;
                 //self.data.num_frames = end_field - start_field + 1;
             }
         }
