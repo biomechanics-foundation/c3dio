@@ -28,9 +28,7 @@ impl Processor {
             0x56 => Ok(ProcessorType::SgiMips),
             _ => Err(C3dParseError::InvalidProcessorType),
         }?;
-        Ok(Processor {
-            processor_type,
-        })
+        Ok(Processor { processor_type })
     }
     pub fn u16(self, bytes: [u8; 2]) -> u16 {
         match self.processor_type {
@@ -60,7 +58,6 @@ impl Processor {
     }
 }
 
-
 fn intel_u16(bytes: [u8; 2]) -> u16 {
     u16::from_le_bytes(bytes)
 }
@@ -78,15 +75,7 @@ fn intel_i16(bytes: [u8; 2]) -> i16 {
 }
 
 fn dec_i16(bytes: [u8; 2]) -> i16 {
-//    if bytes[1] == 0x00 || bytes[1] == 7 || bytes[1] == 255 {
-//        if bytes[0] == 0x00 {
-//            return 0;
-//        }
-//        i16::from_le_bytes([bytes[0]-1, bytes[1]])
-//    }
-//    else {
-        i16::from_le_bytes(bytes)
-//    }
+    i16::from_le_bytes(bytes)
 }
 
 fn sgi_mips_i16(bytes: [u8; 2]) -> i16 {
