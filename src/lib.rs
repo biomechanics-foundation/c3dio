@@ -1,23 +1,25 @@
-use ndarray::{Array2, Array3};
-use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
+use std::{error::Error, fmt};
 
+#[path = "bytes.rs"]
+pub mod bytes;
 #[path = "c3d.rs"]
 pub mod c3d;
-#[path = "events.rs"]
-pub mod events;
 #[path = "data.rs"]
 pub mod data;
+#[path = "events.rs"]
+pub mod events;
 #[path = "parameters.rs"]
 pub mod parameters;
 #[path = "processor.rs"]
 pub mod processor;
 
+use bytes::Bytes;
 use data::Data;
-use parameters::ParameterData;
-use processor::Processor;
 use events::Events;
+use parameters::Parameters;
+use processor::Processor;
 
 #[derive(Debug)]
 pub enum C3dParseError {
@@ -40,19 +42,26 @@ pub enum C3dParseError {
     InvalidNextParameter,
     TooManyEvents(usize),
     NumFramesMismatch(usize, usize),
+    GroupNotFound(String),
+    ParameterNotFound(String, String),
+    RequiredParameterNotFound(String),
+    InvalidData(String),
+    InvalidParameterFormat(String),
+}
+
+impl Error for C3dParseError {}
+impl fmt::Display for C3dParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "C3dParseError: {:?}", self)
+    }
 }
 
 #[derive(Debug)]
 pub struct C3d {
     pub file_path: PathBuf,
     pub file: Option<File>,
-    pub header_bytes: [u8; 512],
-    pub parameter_bytes: Vec<u8>,
-    pub parameters: HashMap<String, HashMap<String, (ParameterData, String)>>,
-    pub group_descriptions: HashMap<String, String>,
-    pub parameter_start_block_index: usize,
-    pub data_bytes: Vec<u8>,
-    pub data_start_block_index: usize,
+    pub bytes: Bytes,
+    pub parameters: Parameters,
     pub processor: Processor,
     pub data: Data,
     pub events: Events,

@@ -96,7 +96,10 @@ fn sample17() {
 fn sample19() {
     // Sample19: read a sample file with 34672 frames of analog data
     // requires reading the header be read as unsigned 16-bit integers
-    assert!(true);
+    let sample19 = C3d::load("tests/c3d.org-sample-files/Sample19/sample19.c3d");
+    assert!(sample19.is_ok());
+    let sample19 = sample19.unwrap();
+    assert!(sample19.data.analog.dim().0 == 34672)
 }
 
 #[test]
@@ -132,7 +135,6 @@ fn sample37() {
 }
 
 // Application Files
-
 
 #[test]
 fn sample03() {
@@ -271,7 +273,7 @@ fn sample25() {
 
 #[test]
 fn sample32() {
-    // Sample32: data corruptio problems from importing from USB-based system
+    // Sample32: data corruption problems from importing from USB-based system
     // at the same time as other sources
     assert!(true);
 }

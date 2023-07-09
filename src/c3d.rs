@@ -1,19 +1,18 @@
-use crate::parameters::{parse_parameter_blocks, ParameterData};
+use crate::parameters::{ParameterData, Parameters};
 
+use crate::bytes::Bytes;
 use crate::data::Data;
 use crate::events::Events;
 use crate::processor::Processor;
 use crate::{C3d, C3dParseError};
 
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 impl PartialEq for C3d {
     fn eq(&self, other: &Self) -> bool {
-        self.group_descriptions == other.group_descriptions
-//            &&  self.parameters == other.parameters
+        self.parameters == other.parameters
             && self.data == other.data
             && self.events == other.events
     }
@@ -50,152 +49,13 @@ impl C3d {
         Ok(c3d)
     }
 
-    //    pub fn get_parameter(
-    //        &self,
-    //        group_name: &str,
-    //        parameter_name: &str,
-    //    ) -> Option<(&ParameterData, &String)> {
-    //        let group = self.parameters.get(group_name)?;
-    //        let parameter = group.get(parameter_name)?;
-    //        Some((&parameter.0, &parameter.1))
-    //    }
-
-    pub fn get_parameter_data(
-        &self,
-        group_name: &str,
-        parameter_name: &str,
-    ) -> Option<&ParameterData> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        Some(&parameter.0)
-    }
-
-    pub fn get_parameter_float(&self, group_name: &str, parameter_name: &str) -> Option<f32> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        match &parameter.0 {
-            ParameterData::Float(data) => {
-                if data.len() == 1 {
-                    data.first().cloned()
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    pub fn get_parameter_float_vec(
-        &self,
-        group_name: &str,
-        parameter_name: &str,
-    ) -> Option<Vec<f32>> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        match &parameter.0 {
-            ParameterData::Float(data) => {
-                if data.ndim() == 1 {
-                    Some(data.to_owned().into_raw_vec())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    pub fn get_parameter_int(&self, group_name: &str, parameter_name: &str) -> Option<i16> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        match &parameter.0 {
-            ParameterData::Integer(data) => {
-                if data.len() == 1 {
-                    data.first().cloned()
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    pub fn get_parameter_int_vec(
-        &self,
-        group_name: &str,
-        parameter_name: &str,
-    ) -> Option<Vec<i16>> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        match &parameter.0 {
-            ParameterData::Integer(data) => {
-                if data.ndim() == 1 {
-                    Some(data.to_owned().into_raw_vec())
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    pub fn get_parameter_string(&self, group_name: &str, parameter_name: &str) -> Option<String> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        match &parameter.0 {
-            ParameterData::Char(data) => {
-                if data.ndim() == 1 {
-                    let mut string = String::new();
-                    for c in data {
-                        string.push(*c as char);
-                    }
-                    Some(string)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
-    pub fn get_parameter_string_vec(
-        &self,
-        group_name: &str,
-        parameter_name: &str,
-    ) -> Option<Vec<String>> {
-        let group = self.parameters.get(group_name)?;
-        let parameter = group.get(parameter_name)?;
-        match &parameter.0 {
-            ParameterData::Char(data) => {
-                if data.ndim() == 2 {
-                    let mut strings = Vec::new();
-                    for column in data.columns() {
-                        let mut string = String::new();
-                        for c in column {
-                            string.push(*c as char);
-                        }
-                        strings.push(string);
-                    }
-                    Some(strings)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
     pub fn new() -> Result<C3d, C3dParseError> {
         let path = PathBuf::from("");
         Ok(C3d {
             file_path: path,
             file: None,
-            header_bytes: [0; 512],
-            parameter_bytes: Vec::new(),
-            parameters: HashMap::new(),
-            group_descriptions: HashMap::new(),
-            parameter_start_block_index: 0,
-            data_start_block_index: 0,
-            data_bytes: Vec::new(),
+            bytes: Bytes::new(),
+            parameters: Parameters::new(),
             processor: Processor::new(),
             data: Data::new(),
             events: Events::new(),
@@ -209,27 +69,27 @@ impl C3d {
     }
 
     fn read_header_bytes(mut self) -> Result<C3d, C3dParseError> {
-        self.header_bytes = [0u8; 512];
+        self.bytes.header = [0u8; 512];
 
         if self.file.is_none() {
             return Err(C3dParseError::FileNotOpen);
         }
 
         let file = self.file.as_mut().unwrap();
-        file.read_exact(&mut self.header_bytes)
+        file.read_exact(&mut self.bytes.header)
             .map_err(|e| C3dParseError::ReadError(e))?;
         Ok(self)
     }
 
     fn read_parameter_bytes(mut self) -> Result<C3d, C3dParseError> {
-        self.parameter_start_block_index = self.header_bytes[0] as usize;
+        self.bytes.parameter_start_block_index = self.bytes.header[0] as usize;
 
         if self.file.is_none() {
             return Err(C3dParseError::FileNotOpen);
         }
 
         let file = self.file.as_mut().unwrap();
-        let blocks_to_skip = self.parameter_start_block_index - 2;
+        let blocks_to_skip = self.bytes.parameter_start_block_index - 2;
         file.seek(SeekFrom::Current((512 * blocks_to_skip) as i64))
             .map_err(|e| C3dParseError::ReadError(e))?;
 
@@ -238,22 +98,23 @@ impl C3d {
             .map_err(|e| C3dParseError::ReadError(e))?;
 
         self.processor = Processor::from_parameter_start_block(parameter_start_block)?;
-        self.data_start_block_index =
+        self.bytes.data_start_block_index =
             self.processor
-                .u16([self.header_bytes[16], self.header_bytes[17]]) as usize;
+                .u16([self.bytes.header[16], self.bytes.header[17]]) as usize;
 
         let mut parameter_bytes_tail = Vec::with_capacity(
-            (self.data_start_block_index - self.parameter_start_block_index - 1) * 512,
+            (self.bytes.data_start_block_index - self.bytes.parameter_start_block_index - 1) * 512,
         ) as Vec<u8>;
 
-        for _ in 0..(self.data_start_block_index - self.parameter_start_block_index - 1) {
+        for _ in 0..(self.bytes.data_start_block_index - self.bytes.parameter_start_block_index - 1)
+        {
             let mut block = [0u8; 512];
             file.read_exact(&mut block)
                 .map_err(|e| C3dParseError::ReadError(e))?;
             parameter_bytes_tail.extend(block.iter());
         }
 
-        self.parameter_bytes = [
+        self.bytes.parameter = [
             parameter_start_block.as_slice(),
             parameter_bytes_tail.as_slice(),
         ]
@@ -269,51 +130,47 @@ impl C3d {
     fn parse_header(mut self) -> Result<C3d, C3dParseError> {
         self.data.points_per_frame = self
             .processor
-            .u16(self.header_bytes[2..4].try_into().unwrap());
+            .u16(self.bytes.header[2..4].try_into().unwrap());
         self.data.analog_samples_per_frame = self
             .processor
-            .u16(self.header_bytes[4..6].try_into().unwrap());
+            .u16(self.bytes.header[4..6].try_into().unwrap());
         self.data.first_frame = self
             .processor
-            .u16(self.header_bytes[6..8].try_into().unwrap());
+            .u16(self.bytes.header[6..8].try_into().unwrap());
         self.data.last_frame = self
             .processor
-            .u16(self.header_bytes[8..10].try_into().unwrap());
+            .u16(self.bytes.header[8..10].try_into().unwrap());
         self.data.max_interpolation_gap = self
             .processor
-            .u16(self.header_bytes[10..12].try_into().unwrap());
+            .u16(self.bytes.header[10..12].try_into().unwrap());
         self.data.scale_factor = self
             .processor
-            .f32(self.header_bytes[12..16].try_into().unwrap());
+            .f32(self.bytes.header[12..16].try_into().unwrap());
         self.data.analog_channels = self
             .processor
-            .u16(self.header_bytes[18..20].try_into().unwrap());
+            .u16(self.bytes.header[18..20].try_into().unwrap());
         self.data.frame_rate = self
             .processor
-            .f32(self.header_bytes[20..24].try_into().unwrap());
-        self.events = Events::from_header_block(&self.header_bytes, &self.processor)?;
+            .f32(self.bytes.header[20..24].try_into().unwrap());
+        self.events = Events::from_header_block(&self.bytes.header, &self.processor)?;
         Ok(self)
     }
 
     fn parse_parameters(mut self) -> Result<C3d, C3dParseError> {
-        let (parameters, group_descriptions) =
-            parse_parameter_blocks(&self.parameter_bytes, &self.processor)?;
-
-        self.parameters = parameters;
-        self.group_descriptions = group_descriptions;
-
+        self.parameters =
+            Parameters::parse_parameter_blocks(&self.bytes.parameter, &self.processor)?;
         Ok(self)
     }
 
     fn read_data_bytes(mut self) -> Result<C3d, C3dParseError> {
-        self.data_bytes = Vec::new();
+        self.bytes.data = Vec::new();
 
         if self.file.is_none() {
             return Err(C3dParseError::FileNotOpen);
         }
 
         let file = self.file.as_mut().unwrap();
-        file.read_to_end(&mut self.data_bytes)
+        file.read_to_end(&mut self.bytes.data)
             .map_err(|e| C3dParseError::ReadError(e))?;
         Ok(self)
     }
@@ -323,7 +180,7 @@ impl C3d {
     }
 
     fn parse_data_bytes(mut self) -> Result<C3d, C3dParseError> {
-        self.data.point_frames = match self.get_parameter_data("POINT", "FRAMES") {
+        self.data.point_frames = match self.parameters.get_data("POINT", "FRAMES") {
             Some(ParameterData::Integer(frames)) => {
                 let frames = frames.first();
                 if let Some(&frames) = frames {
@@ -342,8 +199,8 @@ impl C3d {
             }
             _ => 0,
         };
-        let start_field_parameter = self.get_parameter_int_vec("TRIAL", "ACTUAL_START_FIELD");
-        let end_field_parameter = self.get_parameter_int_vec("TRIAL", "ACTUAL_END_FIELD");
+        let start_field_parameter = self.parameters.get_int_vec("TRIAL", "ACTUAL_START_FIELD");
+        let end_field_parameter = self.parameters.get_int_vec("TRIAL", "ACTUAL_END_FIELD");
 
         if start_field_parameter.is_some() && end_field_parameter.is_some() {
             let start_field_parameter = start_field_parameter.unwrap();
@@ -362,7 +219,7 @@ impl C3d {
                 //self.data.num_frames = end_field - start_field + 1;
             }
         }
-        self.data.parse(&self.data_bytes, &self.processor)?;
+        self.data.parse(&self.bytes.data, &self.processor)?;
         Ok(self)
     }
 }
