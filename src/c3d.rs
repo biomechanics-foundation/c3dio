@@ -219,7 +219,7 @@ impl C3d {
                 //self.data.num_frames = end_field - start_field + 1;
             }
         }
-        self.data.parse(&self.bytes.data, &self.processor)?;
+        self.data.parse(&self.bytes.data, &self.parameters, &self.processor)?;
         Ok(self)
     }
 }

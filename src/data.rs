@@ -1,5 +1,13 @@
+use std::ops::{MulAssign, SubAssign, DivAssign};
+
 use crate::processor::Processor;
-use crate::C3dParseError;
+use crate::{
+    parameters::{
+        AnalogOffset::{Signed, Unsigned},
+        Parameters,
+    },
+    C3dParseError,
+};
 use ndarray::{Array, Array2, Array3};
 
 #[derive(Debug, Clone)]
@@ -85,10 +93,10 @@ impl Data {
         self.num_frames = (self.last_frame as usize - self.first_frame as usize) + 1;
         if self.num_frames != self.point_frames {
             self.num_frames = self.point_frames;
-        //    return Err(C3dParseError::NumFramesMismatch(
-        //        self.point_frames,
-        //        self.num_frames,
-        //    ));
+            //    return Err(C3dParseError::NumFramesMismatch(
+            //        self.point_frames,
+            //        self.num_frames,
+            //    ));
         }
         if self.trial_end_frame - self.trial_start_frame + 1 != self.num_frames {
             self.num_frames = self.trial_end_frame - self.trial_start_frame + 1;
@@ -145,7 +153,11 @@ impl Data {
         Ok(self)
     }
 
-    fn parse_points(&mut self, data_bytes: &[u8], processor: &Processor) -> Result<&mut Self, C3dParseError> {
+    fn parse_points(
+        &mut self,
+        data_bytes: &[u8],
+        processor: &Processor,
+    ) -> Result<&mut Self, C3dParseError> {
         let mut point_data: Array3<f32> =
             Array::zeros((self.num_frames as usize, self.points_per_frame as usize, 3));
         let mut cameras: Array3<bool> = Array::from_elem(
@@ -203,10 +215,20 @@ impl Data {
         Ok(self)
     }
 
-    fn parse_analog(&mut self, data_bytes: &Vec<u8>, processor: &Processor) -> Result<&mut Self, C3dParseError> {
+    fn parse_analog(
+        &mut self,
+        data_bytes: &Vec<u8>,
+        parameters: &Parameters,
+        processor: &Processor,
+    ) -> Result<&mut Self, C3dParseError> {
+        let analog_samples_per_channel_per_frame = if self.analog_channels > 0 {
+            (self.analog_samples_per_frame / self.analog_channels) as usize
+        } else {
+            0
+        };
         let mut analog_data: Array2<f32> = Array::zeros((
-            self.num_frames as usize,
-            self.analog_samples_per_frame as usize,
+            self.num_frames * self.analog_channels as usize,
+            analog_samples_per_channel_per_frame,
         ));
         let mut analog_iter = analog_data.iter_mut();
 
@@ -249,14 +271,39 @@ impl Data {
                 }
             }
         }
+        let offset_len = match &parameters.required_parameters.analog.offset {
+            Signed(offset) => offset.len(),
+            Unsigned(offset) => offset.len(),
+        };
+        if offset_len == parameters.required_parameters.analog.scale.len()
+            && offset_len == analog_data.shape()[1]
+        {
+            analog_data
+                .columns_mut()
+                .into_iter()
+                .enumerate()
+                .for_each(|(i, mut column)| {
+                    match &parameters.required_parameters.analog.offset {
+                        Signed(offset) => column.sub_assign(offset[i] as f32),
+                        Unsigned(offset) => column.sub_assign(offset[i] as f32),
+                    }
+                    column.mul_assign(parameters.required_parameters.analog.scale[i]);
+                });
+            analog_data.div_assign(parameters.required_parameters.analog.gen_scale);
+        }
         self.analog = analog_data;
         Ok(self)
     }
 
-    pub fn parse(&mut self, data_bytes: &Vec<u8>, processor: &Processor) -> Result<(), C3dParseError> {
+    pub fn parse(
+        &mut self,
+        data_bytes: &Vec<u8>,
+        parameters: &Parameters,
+        processor: &Processor,
+    ) -> Result<(), C3dParseError> {
         self.calc_num_frames(data_bytes)?
             .parse_points(data_bytes, processor)?
-            .parse_analog(data_bytes, processor)?;
+            .parse_analog(data_bytes, parameters, processor)?;
         Ok(())
     }
 }
