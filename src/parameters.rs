@@ -54,9 +54,9 @@ impl Parameters {
 impl PartialEq for Parameters {
     fn eq(&self, other: &Self) -> bool {
         self.group_descriptions == other.group_descriptions
-//            && self.raw_parameters == other.raw_parameters
-//            && self.required_parameters == other.required_parameters
-//            && self.additional_parameters == other.additional_parameters
+            && self.required_parameters == other.required_parameters
+            && self.additional_parameters == other.additional_parameters
+            && self.application_parameters == other.application_parameters
     }
 }
 
@@ -142,7 +142,7 @@ impl RequiredParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct RequiredPointParameters {
     pub used: u16,
     pub scale: f32,
@@ -152,6 +152,19 @@ pub struct RequiredPointParameters {
     pub labels: Vec<String>,
     pub descriptions: Vec<String>,
     pub units: [char; 4],
+}
+
+impl PartialEq for RequiredPointParameters {
+    fn eq(&self, other: &Self) -> bool {
+        self.used == other.used
+//            && self.scale == other.scale
+            && self.rate == other.rate
+//            && self.data_start == other.data_start
+            && self.frames == other.frames
+            && self.labels == other.labels
+            && self.descriptions == other.descriptions
+            && self.units == other.units
+    }
 }
 
 impl RequiredPointParameters {
