@@ -49,8 +49,6 @@ impl Parameters {
     pub fn get_data(&self, group: &str, parameter: &str) -> Option<ParameterData> {
         get(&self.raw_parameters, group, parameter)
     }
-
-
 }
 
 impl PartialEq for Parameters {
@@ -76,9 +74,7 @@ impl AnalogOffset {
         let offset = get_signed_integer_vec(raw_parameters, "ANALOG", "OFFSET");
         let offset = match offset {
             Some(offset) => offset,
-            None => {
-                return Ok(AnalogOffset::Signed(Vec::new()))
-            },
+            None => return Ok(AnalogOffset::Signed(Vec::new())),
         };
         match format {
             AnalogFormat::Signed => Ok(AnalogOffset::Signed(offset)),
