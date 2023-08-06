@@ -227,8 +227,7 @@ impl Data {
             0
         };
         let mut analog_data: Array2<f32> = Array::zeros((
-            self.num_frames * self.analog_channels as usize,
-            analog_samples_per_channel_per_frame,
+            self.num_frames * analog_samples_per_channel_per_frame, self.analog_channels as usize,
         ));
         let mut analog_iter = analog_data.iter_mut();
 

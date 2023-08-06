@@ -10,7 +10,6 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
-
 impl PartialEq for C3d {
     fn eq(&self, other: &Self) -> bool {
         self.parameters == other.parameters
@@ -22,14 +21,12 @@ impl PartialEq for C3d {
 impl C3d {
     pub fn load(file_name: &str) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?;
-        let (c3d, file) = 
-            c3d.open_file(file_name)?;
-            c3d.parse_basic_info(file)?
+        let (c3d, mut file) = c3d.open_file(file_name)?;
+        Ok(c3d
+            .parse_basic_info(&mut file)?
             .parse_header()?
             .parse_parameters()?
-            .parse_data(file)?;
-
-        Ok(c3d)
+            .parse_data(file)?)
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<C3d, C3dParseError> {
@@ -44,23 +41,16 @@ impl C3d {
 
     pub fn load_header(file_name: &str) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?;
-        let (c3d, file) = 
-            c3d.open_file(file_name)?;
-            c3d.parse_basic_info(file)?
-            .parse_header()?;
-
-        Ok(c3d)
+        let (c3d, mut file) = c3d.open_file(file_name)?;
+        Ok(c3d.parse_basic_info(&mut file)?.parse_header()?)
     }
 
     pub fn load_parameters(file_name: &str) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?;
-        let (c3d, file) = 
-            c3d.open_file(file_name)?;
-            c3d.parse_basic_info(file)?
+        let (c3d, mut file) = c3d.open_file(file_name)?;
+        Ok(c3d.parse_basic_info(&mut file)?
             .parse_header()?
-            .parse_parameters()?;
-
-        Ok(c3d)
+            .parse_parameters()?)
     }
 
     pub fn new() -> Result<C3d, C3dParseError> {
@@ -76,18 +66,18 @@ impl C3d {
 
     fn open_file(mut self, file_name: &str) -> Result<(C3d, File), C3dParseError> {
         self.file_path = Some(PathBuf::from(file_name));
-        let file = File::open(&self.file_path.unwrap()).map_err(|e| C3dParseError::ReadError(e))?;
+        let file = File::open(self.file_path.clone().unwrap()).map_err(|e| C3dParseError::ReadError(e))?;
         Ok((self, file))
     }
 
-    fn read_header_bytes(mut self, mut file: File) -> Result<C3d, C3dParseError> {
+    fn read_header_bytes(mut self, file: &mut File) -> Result<C3d, C3dParseError> {
         self.bytes.header = [0u8; 512];
         file.read_exact(&mut self.bytes.header)
-                .map_err(|e| C3dParseError::ReadError(e))?;
+            .map_err(|e| C3dParseError::ReadError(e))?;
         Ok(self)
     }
 
-    fn read_parameter_bytes(mut self, mut file: File) -> Result<C3d, C3dParseError> {
+    fn read_parameter_bytes(mut self, file: &mut File) -> Result<C3d, C3dParseError> {
         self.bytes.parameter_start_block_index = self.bytes.header[0] as usize;
 
         let blocks_to_skip = self.bytes.parameter_start_block_index - 2;
@@ -124,8 +114,38 @@ impl C3d {
         Ok(self)
     }
 
-    fn parse_basic_info(self, mut file: File) -> Result<C3d, C3dParseError> {
+    fn parse_basic_info(self, file: &mut File) -> Result<C3d, C3dParseError> {
         self.read_header_bytes(file)?.read_parameter_bytes(file)
+    }
+
+    fn parse_basic_info_from_bytes(mut self, bytes: &[u8]) -> Result<C3d, C3dParseError> {
+        if bytes.len() < 512 {
+            return Err(C3dParseError::InsufficientBlocks("header".to_string()));
+        }
+        self.bytes.header = bytes[0..512].try_into().unwrap();
+
+        self.bytes.parameter_start_block_index = self.bytes.header[0] as usize;
+
+        if bytes.len() < 512 * (self.bytes.parameter_start_block_index + 1) {
+            return Err(C3dParseError::InsufficientBlocks("parameter".to_string()));
+        }
+        let parameter_start_block = &bytes[512..1024];
+
+        self.processor =
+            Processor::from_parameter_start_block(parameter_start_block.try_into().unwrap())?;
+        self.bytes.data_start_block_index =
+            self.processor
+                .u16([self.bytes.header[16], self.bytes.header[17]]) as usize;
+
+        if bytes.len() < 512 * (self.bytes.data_start_block_index + 1) {
+            return Err(C3dParseError::InsufficientBlocks("data".to_string()));
+        }
+
+        self.bytes.parameter = bytes[512..(512 * (self.bytes.data_start_block_index + 1))]
+            .try_into()
+            .unwrap();
+
+        Ok(self)
     }
 
     fn parse_header(mut self) -> Result<C3d, C3dParseError> {
@@ -171,8 +191,17 @@ impl C3d {
         Ok(self)
     }
 
-    fn parse_data(self, mut file: File) -> Result<C3d, C3dParseError> {
+    fn parse_data(self, file: File) -> Result<C3d, C3dParseError> {
         self.read_data_bytes(file)?.parse_data_bytes()
+    }
+
+    fn parse_data_from_bytes(mut self, bytes: &[u8]) -> Result<C3d, C3dParseError> {
+        let data_start_byte = 512 * (self.bytes.data_start_block_index + 1);
+        if bytes.len() < data_start_byte {
+            return Err(C3dParseError::InsufficientBlocks("data".to_string()));
+        }
+        self.bytes.data = bytes[data_start_byte..].to_vec();
+        self.parse_data_bytes()
     }
 
     fn parse_data_bytes(mut self) -> Result<C3d, C3dParseError> {
@@ -215,7 +244,8 @@ impl C3d {
                 //self.data.num_frames = end_field - start_field + 1;
             }
         }
-        self.data.parse(&self.bytes.data, &self.parameters, &self.processor)?;
+        self.data
+            .parse(&self.bytes.data, &self.parameters, &self.processor)?;
         Ok(self)
     }
 }
@@ -236,11 +266,11 @@ pub fn test_load_file(file_name: &str) -> ProcessStep {
         Ok(c3d) => c3d,
         Err(_) => return ProcessStep::MakeEmpty,
     };
-    let (c3d, file) = match c3d.open_file(file_name) {
+    let (c3d, mut file) = match c3d.open_file(file_name) {
         Ok(c3d) => c3d,
         Err(_) => return ProcessStep::LoadFile,
     };
-    let c3d = match c3d.parse_basic_info(file) {
+    let c3d = match c3d.parse_basic_info(&mut file) {
         Ok(c3d) => c3d,
         Err(_) => return ProcessStep::ParseBasicInfo,
     };
