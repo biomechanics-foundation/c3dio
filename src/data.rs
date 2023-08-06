@@ -1,4 +1,4 @@
-use std::ops::{MulAssign, SubAssign, DivAssign};
+use std::ops::{DivAssign, MulAssign, SubAssign};
 
 use crate::processor::Processor;
 use crate::{
@@ -13,13 +13,10 @@ use ndarray::{Array, Array2, Array3};
 #[derive(Debug, Clone)]
 pub struct Data {
     pub points: Array3<f32>,
-    pub point_labels: Vec<String>,
     pub cameras: Array3<bool>,
     pub residuals: Array2<f32>,
     pub num_frames: usize,
     pub point_frames: usize,
-    pub trial_start_frame: usize,
-    pub trial_end_frame: usize,
     pub frame_rate: f32,
     pub scale_factor: f32,
     pub max_interpolation_gap: u16,
@@ -38,7 +35,6 @@ pub struct Data {
 impl PartialEq for Data {
     fn eq(&self, other: &Self) -> bool {
         self.points == other.points
-            && self.point_labels == other.point_labels
             && self.cameras == other.cameras
             && self.residuals == other.residuals
             && self.num_frames == other.num_frames
@@ -66,13 +62,10 @@ impl Data {
     pub fn new() -> Data {
         Data {
             points: Array3::zeros((0, 0, 0)),
-            point_labels: Vec::new(),
             cameras: Array3::from_elem((0, 0, 0), false),
             residuals: Array2::zeros((0, 0)),
             num_frames: 0,
             point_frames: 0,
-            trial_start_frame: 0,
-            trial_end_frame: 0,
             frame_rate: 0.0,
             scale_factor: 0.0,
             max_interpolation_gap: 0,
@@ -89,7 +82,11 @@ impl Data {
         }
     }
 
-    fn calc_num_frames(&mut self, data_bytes: &[u8]) -> Result<&mut Self, C3dParseError> {
+    fn calc_num_frames(
+        &mut self,
+        data_bytes: &[u8],
+        parameters: &Parameters,
+    ) -> Result<&mut Self, C3dParseError> {
         self.num_frames = (self.last_frame as usize - self.first_frame as usize) + 1;
         if self.num_frames != self.point_frames {
             self.num_frames = self.point_frames;
@@ -98,8 +95,18 @@ impl Data {
             //        self.num_frames,
             //    ));
         }
-        if self.trial_end_frame - self.trial_start_frame + 1 != self.num_frames {
-            self.num_frames = self.trial_end_frame - self.trial_start_frame + 1;
+        if parameters.trial.actual_start_field.is_some()
+            && parameters.trial.actual_end_field.is_some()
+        {
+            if (parameters.trial.actual_end_field.unwrap()
+                - parameters.trial.actual_start_field.unwrap()
+                + 1) as usize
+                != self.num_frames
+            {
+                self.num_frames = (parameters.trial.actual_end_field.unwrap()
+                    - parameters.trial.actual_start_field.unwrap()
+                    + 1) as usize;
+            }
         }
 
         if DataFormat::Unknown == self.format {
@@ -227,7 +234,8 @@ impl Data {
             0
         };
         let mut analog_data: Array2<f32> = Array::zeros((
-            self.num_frames * analog_samples_per_channel_per_frame, self.analog_channels as usize,
+            self.num_frames * analog_samples_per_channel_per_frame,
+            self.analog_channels as usize,
         ));
         let mut analog_iter = analog_data.iter_mut();
 
@@ -270,25 +278,23 @@ impl Data {
                 }
             }
         }
-        let offset_len = match &parameters.required_parameters.analog.offset {
+        let offset_len = match &parameters.analog.offset {
             Signed(offset) => offset.len(),
             Unsigned(offset) => offset.len(),
         };
-        if offset_len == parameters.required_parameters.analog.scale.len()
-            && offset_len == analog_data.shape()[1]
-        {
+        if offset_len == parameters.analog.scale.len() && offset_len == analog_data.shape()[1] {
             analog_data
                 .columns_mut()
                 .into_iter()
                 .enumerate()
                 .for_each(|(i, mut column)| {
-                    match &parameters.required_parameters.analog.offset {
+                    match &parameters.analog.offset {
                         Signed(offset) => column.sub_assign(offset[i] as f32),
                         Unsigned(offset) => column.sub_assign(offset[i] as f32),
                     }
-                    column.mul_assign(parameters.required_parameters.analog.scale[i]);
+                    column.mul_assign(parameters.analog.scale[i]);
                 });
-            analog_data.div_assign(parameters.required_parameters.analog.gen_scale);
+            analog_data.div_assign(parameters.analog.gen_scale);
         }
         self.analog = analog_data;
         Ok(self)
@@ -300,7 +306,7 @@ impl Data {
         parameters: &Parameters,
         processor: &Processor,
     ) -> Result<(), C3dParseError> {
-        self.calc_num_frames(data_bytes)?
+        self.calc_num_frames(data_bytes, parameters)?
             .parse_points(data_bytes, processor)?
             .parse_analog(data_bytes, parameters, processor)?;
         Ok(())

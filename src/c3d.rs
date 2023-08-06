@@ -224,26 +224,7 @@ impl C3d {
             }
             _ => 0,
         };
-        let start_field_parameter = self.parameters.get_int_vec("TRIAL", "ACTUAL_START_FIELD");
-        let end_field_parameter = self.parameters.get_int_vec("TRIAL", "ACTUAL_END_FIELD");
 
-        if start_field_parameter.is_some() && end_field_parameter.is_some() {
-            let start_field_parameter = start_field_parameter.unwrap();
-            let end_field_parameter = end_field_parameter.unwrap();
-
-            if start_field_parameter.len() == 2 && end_field_parameter.len() == 2 {
-                let start_one = start_field_parameter.first().unwrap();
-                let start_two = start_field_parameter.last().unwrap();
-                let end_one = end_field_parameter.first().unwrap();
-                let end_two = end_field_parameter.last().unwrap();
-
-                self.data.trial_start_frame =
-                    *start_one as u16 as usize + (*start_two as u16 * 65535) as usize;
-                self.data.trial_end_frame =
-                    *end_one as u16 as usize + (*end_two as u16 * 65535) as usize;
-                //self.data.num_frames = end_field - start_field + 1;
-            }
-        }
         self.data
             .parse(&self.bytes.data, &self.parameters, &self.processor)?;
         Ok(self)

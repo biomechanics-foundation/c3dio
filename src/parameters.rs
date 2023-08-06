@@ -8,9 +8,14 @@ use ndarray::{Array, Array2, Array3, ArrayView, Ix2, Ix3, IxDyn, Order};
 pub struct Parameters {
     pub group_descriptions: HashMap<String, String>,
     pub raw_parameters: HashMap<String, HashMap<String, (ParameterData, String)>>,
-    pub required_parameters: RequiredParameters,
-    pub additional_parameters: AdditionalParameters,
-    pub application_parameters: ApplicationParameters,
+    pub point: PointParameters,
+    pub analog: AnalogParameters,
+    pub force_platform: ForcePlatformParameters,
+    pub trial: TrialParameters,
+    pub event: EventParameters,
+    pub event_context: EventContextParameters,
+    pub manufacturer: ManufacturerParameters,
+    pub seg: SegParameters,
 }
 
 impl Parameters {
@@ -18,9 +23,14 @@ impl Parameters {
         Parameters {
             group_descriptions: HashMap::new(),
             raw_parameters: HashMap::new(),
-            required_parameters: RequiredParameters::new(),
-            additional_parameters: AdditionalParameters::new(),
-            application_parameters: ApplicationParameters::new(),
+            point: PointParameters::new(),
+            analog: AnalogParameters::new(),
+            force_platform: ForcePlatformParameters::new(),
+            trial: TrialParameters::new(),
+            event: EventParameters::new(),
+            event_context: EventContextParameters::new(),
+            manufacturer: ManufacturerParameters::new(),
+            seg: SegParameters::new(),
         }
     }
 
@@ -30,15 +40,26 @@ impl Parameters {
     ) -> Result<Self, C3dParseError> {
         let (raw_parameters, group_descriptions) =
             parse_parameter_blocks(parameter_blocks, processor)?;
-        let required_parameters = RequiredParameters::from_raw(&raw_parameters)?;
-        let additional_parameters = AdditionalParameters::from_raw(&raw_parameters);
-        let application_parameters = ApplicationParameters::from_raw(&raw_parameters);
+        let point = PointParameters::from_raw(&raw_parameters)?;
+        let analog = AnalogParameters::from_raw(&raw_parameters)?;
+        let force_platform = ForcePlatformParameters::from_raw(&raw_parameters)?;
+        let trial = TrialParameters::from_raw(&raw_parameters)?;
+        let event = EventParameters::from_raw(&raw_parameters);
+        let event_context = EventContextParameters::from_raw(&raw_parameters);
+        let manufacturer = ManufacturerParameters::from_raw(&raw_parameters);
+        let seg = SegParameters::from_raw(&raw_parameters);
+        dbg!(&raw_parameters);
         Ok(Parameters {
             group_descriptions,
             raw_parameters,
-            required_parameters,
-            additional_parameters,
-            application_parameters,
+            point,
+            analog,
+            force_platform,
+            trial,
+            event,
+            event_context,
+            manufacturer,
+            seg,
         })
     }
 
@@ -54,9 +75,14 @@ impl Parameters {
 impl PartialEq for Parameters {
     fn eq(&self, other: &Self) -> bool {
         self.group_descriptions == other.group_descriptions
-            && self.required_parameters == other.required_parameters
-            && self.additional_parameters == other.additional_parameters
-            && self.application_parameters == other.application_parameters
+            && self.point == other.point
+            && self.analog == other.analog
+            && self.force_platform == other.force_platform
+            && self.trial == other.trial
+            && self.event == other.event
+            && self.event_context == other.event_context
+            && self.manufacturer == other.manufacturer
+            && self.seg == other.seg
     }
 }
 
@@ -114,36 +140,8 @@ impl ForcePlatformType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct RequiredParameters {
-    pub point: RequiredPointParameters,
-    pub analog: RequiredAnalogParameters,
-    pub force_platform: RequiredForcePlatformParameters,
-}
-
-impl RequiredParameters {
-    pub fn new() -> Self {
-        RequiredParameters {
-            point: RequiredPointParameters::new(),
-            analog: RequiredAnalogParameters::new(),
-            force_platform: RequiredForcePlatformParameters::new(),
-        }
-    }
-
-    pub fn from_raw(
-        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
-    ) -> Result<Self, C3dParseError> {
-        let required_parameters = RequiredParameters {
-            point: RequiredPointParameters::from_raw(raw_parameters)?,
-            analog: RequiredAnalogParameters::from_raw(raw_parameters)?,
-            force_platform: RequiredForcePlatformParameters::from_raw(raw_parameters)?,
-        };
-        Ok(required_parameters)
-    }
-}
-
 #[derive(Debug, Clone)]
-pub struct RequiredPointParameters {
+pub struct PointParameters {
     pub used: u16,
     pub scale: f32,
     pub rate: f32,
@@ -152,9 +150,12 @@ pub struct RequiredPointParameters {
     pub labels: Vec<String>,
     pub descriptions: Vec<String>,
     pub units: [char; 4],
+    pub long_frames: Option<f32>,
+    pub x_screen: Option<[char; 2]>,
+    pub y_screen: Option<[char; 2]>,
 }
 
-impl PartialEq for RequiredPointParameters {
+impl PartialEq for PointParameters {
     fn eq(&self, other: &Self) -> bool {
         self.used == other.used
 //            && self.scale == other.scale
@@ -164,12 +165,15 @@ impl PartialEq for RequiredPointParameters {
             && self.labels == other.labels
             && self.descriptions == other.descriptions
             && self.units == other.units
+            && self.long_frames == other.long_frames
+            && self.x_screen == other.x_screen
+            && self.y_screen == other.y_screen
     }
 }
 
-impl RequiredPointParameters {
+impl PointParameters {
     pub fn new() -> Self {
-        RequiredPointParameters {
+        PointParameters {
             used: 0,
             scale: 0.0,
             rate: 0.0,
@@ -178,6 +182,9 @@ impl RequiredPointParameters {
             labels: Vec::new(),
             descriptions: Vec::new(),
             units: [' '; 4],
+            long_frames: None,
+            x_screen: None,
+            y_screen: None,
         }
     }
 
@@ -186,7 +193,7 @@ impl RequiredPointParameters {
     ) -> Result<Self, C3dParseError> {
         let used = get_signed_integer(raw_parameters, "POINT", "USED");
         if used.is_none() || used.unwrap() == 0 {
-            return Ok(RequiredPointParameters::new());
+            return Ok(PointParameters::new());
         }
         let mut frames = get_signed_integer(raw_parameters, "POINT", "FRAMES");
         if frames.is_none() {
@@ -199,7 +206,7 @@ impl RequiredPointParameters {
             }
             frames = try_float;
         }
-        let required_point_parameters = RequiredPointParameters {
+        let required_point_parameters = PointParameters {
             used: get_or_err(raw_parameters, "POINT", "USED")?.try_into()?,
             scale: get_or_err(raw_parameters, "POINT", "SCALE")?.try_into()?,
             rate: get_float(raw_parameters, "POINT", "RATE").unwrap_or(0.0),
@@ -209,6 +216,9 @@ impl RequiredPointParameters {
             descriptions: get_string_vec(raw_parameters, "POINT", "DESCRIPTIONS")
                 .unwrap_or(Vec::new()),
             units: get_char_quad(raw_parameters, "POINT", "UNITS").unwrap_or([' '; 4]),
+            long_frames: get_float(raw_parameters, "POINT", "LONG_FRAMES"),
+            x_screen: get_char_pair(raw_parameters, "POINT", "X_SCREEN"),
+            y_screen: get_char_pair(raw_parameters, "POINT", "Y_SCREEN"),
         };
         Ok(required_point_parameters)
     }
@@ -237,7 +247,7 @@ impl AnalogFormat {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RequiredAnalogParameters {
+pub struct AnalogParameters {
     pub used: u16,
     pub labels: Vec<String>,
     pub descriptions: Vec<String>,
@@ -248,11 +258,12 @@ pub struct RequiredAnalogParameters {
     pub rate: f32,
     pub format: AnalogFormat,
     pub bits: i16,
+    pub gain: Option<Vec<i16>>,
 }
 
-impl RequiredAnalogParameters {
+impl AnalogParameters {
     pub fn new() -> Self {
-        RequiredAnalogParameters {
+        AnalogParameters {
             used: 0,
             labels: Vec::new(),
             descriptions: Vec::new(),
@@ -263,6 +274,7 @@ impl RequiredAnalogParameters {
             rate: 0.0,
             format: AnalogFormat::Signed,
             bits: 0,
+            gain: None,
         }
     }
 
@@ -271,11 +283,11 @@ impl RequiredAnalogParameters {
     ) -> Result<Self, C3dParseError> {
         let used = get_signed_integer(raw_parameters, "ANALOG", "USED");
         if used.is_none() || used.unwrap() == 0 {
-            return Ok(RequiredAnalogParameters::new());
+            return Ok(AnalogParameters::new());
         }
         let format = AnalogFormat::from_raw(raw_parameters);
         let offset = AnalogOffset::from_raw(raw_parameters, &format)?;
-        let required_analog_parameters = RequiredAnalogParameters {
+        let analog_parameters = AnalogParameters {
             used: get_or_err(raw_parameters, "ANALOG", "USED")?.try_into()?,
             labels: get_or_err(raw_parameters, "ANALOG", "LABELS")?.try_into()?,
             descriptions: get_string_vec(raw_parameters, "ANALOG", "DESCRIPTIONS")
@@ -287,8 +299,9 @@ impl RequiredAnalogParameters {
             rate: get_or_err(raw_parameters, "ANALOG", "RATE")?.try_into()?,
             format,
             bits: get_signed_integer(raw_parameters, "ANALOG", "BITS").unwrap_or(12),
+            gain: get_signed_integer_vec(raw_parameters, "ANALOG", "GAIN"),
         };
-        Ok(required_analog_parameters)
+        Ok(analog_parameters)
     }
 }
 
@@ -379,24 +392,26 @@ impl ForcePlatformOrigin {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RequiredForcePlatformParameters {
+pub struct ForcePlatformParameters {
     pub used: u16,
     pub plate_type: Option<Vec<ForcePlatformType>>,
     pub zero: Option<[u16; 2]>,
     pub corners: Option<ForcePlatformCorners>,
     pub origin: Option<ForcePlatformOrigin>,
     pub channel: Option<Array2<i16>>,
+    pub cal_matrix: Option<Array3<f32>>,
 }
 
-impl RequiredForcePlatformParameters {
+impl ForcePlatformParameters {
     pub fn new() -> Self {
-        RequiredForcePlatformParameters {
+        ForcePlatformParameters {
             used: 0,
             plate_type: None,
             zero: None,
             corners: None,
             origin: None,
             channel: None,
+            cal_matrix: None,
         }
     }
 
@@ -405,22 +420,222 @@ impl RequiredForcePlatformParameters {
     ) -> Result<Self, C3dParseError> {
         let used = get_signed_integer(raw_parameters, "FORCE_PLATFORM", "USED");
         if used.is_none() || used.unwrap() == 0 {
-            return Ok(RequiredForcePlatformParameters::new());
+            return Ok(ForcePlatformParameters::new());
         }
         let plate_type = ForcePlatformType::from_raw(raw_parameters)?;
         let corners = ForcePlatformCorners::from_raw(raw_parameters)?;
         let origin = ForcePlatformOrigin::from_raw(raw_parameters)?;
         let zero = get_or_err(raw_parameters, "FORCE_PLATFORM", "ZERO")?.try_into()?;
         let channel = get_signed_integer_array2(raw_parameters, "FORCE_PLATFORM", "CHANNEL");
-        let required_force_platform_parameters = RequiredForcePlatformParameters {
+        let force_platform_parameters = ForcePlatformParameters {
             used: used.unwrap() as u16,
             plate_type: Some(plate_type),
             zero: Some(zero),
             corners: Some(corners),
             origin: Some(origin),
             channel,
+            cal_matrix: get_float_array3(raw_parameters, "FORCE_PLATFORM", "CAL_MATRIX"),
         };
-        Ok(required_force_platform_parameters)
+        Ok(force_platform_parameters)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TrialParameters {
+    pub actual_start_field: Option<usize>,
+    pub actual_end_field: Option<usize>,
+    pub camera_rate: Option<f32>,
+}
+
+impl TrialParameters {
+    pub fn new() -> Self {
+        TrialParameters {
+            actual_start_field: None,
+            actual_end_field: None,
+            camera_rate: None,
+        }
+    }
+
+    pub fn from_raw(
+        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
+    ) -> Result<Self, C3dParseError> {
+        let end_field = get_signed_integer_vec(raw_parameters, "TRIAL", "ACTUAL_END_FIELD");
+        let actual_end_field = if end_field.is_some() {
+            let end_field = end_field.unwrap();
+            if end_field.len() != 2 {
+                None
+            } else {
+            Some(end_field[0] as u16 as usize + (end_field[1] as u16 * 65535) as usize)
+            }
+        } else {
+            None
+        };
+        let start_field = get_signed_integer_vec(raw_parameters, "TRIAL", "ACTUAL_START_FIELD");
+        let actual_start_field = if start_field.is_some() {
+            let start_field = start_field.unwrap();
+            if start_field.len() != 2 {
+                None
+            } else {
+                Some(start_field[0] as u16 as usize + (start_field[1] as u16 * 65535) as usize)
+            }
+        } else {
+            None
+        };
+        let trial_parameters = TrialParameters {
+            actual_end_field,
+            actual_start_field,
+            camera_rate: get_float(raw_parameters, "TRIAL", "CAMERA_RATE"),
+        };
+        Ok(trial_parameters)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EventParameters {
+    pub used: Option<i16>,
+    pub contexts: Option<Vec<String>>,
+    pub labels: Option<Vec<String>>,
+    pub descriptions: Option<Vec<String>>,
+    pub times: Option<Vec<[f32; 2]>>,
+    pub subjects: Option<Vec<String>>,
+    pub icon_ids: Option<Vec<i16>>,
+    pub generic_flags: Option<Vec<i16>>,
+}
+
+impl EventParameters {
+    pub fn new() -> Self {
+        EventParameters {
+            used: None,
+            contexts: None,
+            labels: None,
+            descriptions: None,
+            times: None,
+            subjects: None,
+            icon_ids: None,
+            generic_flags: None,
+        }
+    }
+
+    pub fn from_raw(
+        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
+    ) -> Self {
+        EventParameters {
+            used: get_signed_integer(raw_parameters, "EVENT", "USED"),
+            contexts: get_string_vec(raw_parameters, "EVENT", "CONTEXTS"),
+            labels: get_string_vec(raw_parameters, "EVENT", "LABELS"),
+            descriptions: get_string_vec(raw_parameters, "EVENT", "DESCRIPTIONS"),
+            times: get_times_array(raw_parameters, "EVENT", "TIMES"),
+            subjects: get_string_vec(raw_parameters, "EVENT", "SUBJECTS"),
+            icon_ids: get_signed_integer_vec(raw_parameters, "EVENT", "ICON_IDS"),
+            generic_flags: get_signed_integer_vec(raw_parameters, "EVENT", "GENERIC_FLAGS"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EventContextParameters {
+    pub used: Option<i16>,
+    pub icon_ids: Option<Vec<u16>>,
+    pub labels: Option<Vec<String>>,
+    pub descriptions: Option<Vec<String>>,
+    pub colours: Option<Vec<[u8; 3]>>,
+}
+
+impl EventContextParameters {
+    pub fn new() -> Self {
+        EventContextParameters {
+            used: None,
+            icon_ids: None,
+            labels: None,
+            descriptions: None,
+            colours: None,
+        }
+    }
+
+    pub fn from_raw(
+        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
+    ) -> Self {
+        EventContextParameters {
+            used: get_signed_integer(raw_parameters, "EVENT_CONTEXT", "USED"),
+            icon_ids: get_signed_integer_vec(raw_parameters, "EVENT_CONTEXT", "ICON_IDS")
+                .map(|x| x.iter().map(|&x| x as u16).collect()),
+            labels: get_string_vec(raw_parameters, "EVENT_CONTEXT", "LABELS"),
+            descriptions: get_string_vec(raw_parameters, "EVENT_CONTEXT", "DESCRIPTIONS"),
+            colours: get_colour_array(raw_parameters, "EVENT_CONTEXT", "COLOURS"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ManufacturerVersion {
+    String(String),
+    Float(f32),
+    Array(Vec<u16>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManufacturerParameters {
+    pub company: Option<String>,
+    pub software: Option<String>,
+    pub version: Option<ManufacturerVersion>,
+    pub edited: Option<Vec<String>>,
+}
+
+impl ManufacturerParameters {
+    pub fn new() -> Self {
+        ManufacturerParameters {
+            company: None,
+            software: None,
+            version: None,
+            edited: None,
+        }
+    }
+
+    pub fn from_raw(
+        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
+        ) -> Self {
+        ManufacturerParameters {
+            company: get_string(raw_parameters, "MANUFACTURER", "COMPANY"),
+            software: get_string(raw_parameters, "MANUFACTURER", "SOFTWARE"),
+            version: None, // TODO
+            edited: get_string_vec(raw_parameters, "MANUFACTURER", "EDITED"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SegParameters {
+    pub marker_diameter: Option<f32>,
+    pub data_limits: Option<Array2<f32>>,
+    pub acc_factor: Option<f32>,
+    pub noise_factor: Option<f32>,
+    pub residual_error_factor: Option<f32>,
+    pub intersection_limit: Option<f32>,
+}
+
+impl SegParameters {
+    pub fn new() -> Self {
+        SegParameters {
+            marker_diameter: None,
+            data_limits: None,
+            acc_factor: None,
+            noise_factor: None,
+            residual_error_factor: None,
+            intersection_limit: None,
+        }
+    }
+
+    pub fn from_raw(
+        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
+        ) -> Self {
+        SegParameters {
+            marker_diameter: get_float(raw_parameters, "SEG", "MARKER_DIAMETER"),
+            data_limits: get_float_array2(raw_parameters, "SEG", "DATA_LIMITS"),
+            acc_factor: get_float(raw_parameters, "SEG", "ACC_FACTOR"),
+            noise_factor: get_float(raw_parameters, "SEG", "NOISE_FACTOR"),
+            residual_error_factor: get_float(raw_parameters, "SEG", "RESIDUAL_ERROR_FACTOR"),
+            intersection_limit: get_float(raw_parameters, "SEG", "INTERSECTION_LIMIT"),
+        }
     }
 }
 
@@ -619,161 +834,6 @@ impl TryFrom<ParameterData> for Vec<[char; 4]> {
                 }
             }
             _ => Err(C3dParseError::InvalidData("Vec<[char; 4]>".to_string())),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct AdditionalParameters {
-    pub point_long_frames: Option<f32>,
-    pub force_platform_cal_matrix: Option<Array3<f32>>,
-    pub trial_actual_start_field: Option<u16>,
-    pub trial_actual_end_field: Option<u16>,
-    pub trial_camera_rate: Option<f32>,
-    pub event_used: Option<i16>,
-    pub event_contexts: Option<Vec<String>>,
-    pub event_labels: Option<Vec<String>>,
-    pub event_descriptions: Option<Vec<String>>,
-    pub event_times: Option<Vec<[f32; 2]>>,
-    pub event_subjects: Option<Vec<String>>,
-    pub event_icon_ids: Option<Vec<i16>>,
-    pub event_generic_flags: Option<Vec<i16>>,
-    pub event_context_used: Option<i16>,
-    pub event_context_icon_ids: Option<Vec<u16>>,
-    pub event_context_labels: Option<Vec<String>>,
-    pub event_context_descriptions: Option<Vec<String>>,
-    pub event_context_colours: Option<Vec<[u8; 3]>>,
-}
-
-impl AdditionalParameters {
-    pub fn new() -> Self {
-        AdditionalParameters {
-            point_long_frames: None,
-            force_platform_cal_matrix: None,
-            trial_actual_start_field: None,
-            trial_actual_end_field: None,
-            trial_camera_rate: None,
-            event_used: None,
-            event_contexts: None,
-            event_labels: None,
-            event_descriptions: None,
-            event_times: None,
-            event_subjects: None,
-            event_icon_ids: None,
-            event_generic_flags: None,
-            event_context_used: None,
-            event_context_icon_ids: None,
-            event_context_labels: None,
-            event_context_descriptions: None,
-            event_context_colours: None,
-        }
-    }
-
-    pub fn from_raw(
-        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
-    ) -> Self {
-        AdditionalParameters {
-            point_long_frames: get_float(raw_parameters, "POINT", "LONG_FRAMES"),
-            force_platform_cal_matrix: get_float_array3(
-                raw_parameters,
-                "FORCE_PLATFORM",
-                "CAL_MATRIX",
-            ),
-            trial_actual_start_field: get_signed_integer(
-                raw_parameters,
-                "TRIAL",
-                "ACTUAL_START_FIELD",
-            )
-            .map(|x| x as u16),
-            trial_actual_end_field: get_signed_integer(raw_parameters, "TRIAL", "ACTUAL_END_FIELD")
-                .map(|x| x as u16),
-            trial_camera_rate: get_float(raw_parameters, "TRIAL", "CAMERA_RATE"),
-            event_used: get_signed_integer(raw_parameters, "EVENT", "USED"),
-            event_contexts: get_string_vec(raw_parameters, "EVENT", "CONTEXTS"),
-            event_labels: get_string_vec(raw_parameters, "EVENT", "LABELS"),
-            event_descriptions: get_string_vec(raw_parameters, "EVENT", "DESCRIPTIONS"),
-            event_times: get_times_array(raw_parameters, "EVENT", "TIMES"),
-            event_subjects: get_string_vec(raw_parameters, "EVENT", "SUBJECTS"),
-            event_icon_ids: get_signed_integer_vec(raw_parameters, "EVENT", "ICON_IDS"),
-            event_generic_flags: get_signed_integer_vec(raw_parameters, "EVENT", "GENERIC_FLAGS"),
-            event_context_used: get_signed_integer(raw_parameters, "EVENT_CONTEXT", "USED"),
-            event_context_icon_ids: get_signed_integer_vec(
-                raw_parameters,
-                "EVENT_CONTEXT",
-                "ICON_IDS",
-            )
-            .map(|x| x.iter().map(|&x| x as u16).collect()),
-            event_context_labels: get_string_vec(raw_parameters, "EVENT_CONTEXT", "LABELS"),
-            event_context_descriptions: get_string_vec(
-                raw_parameters,
-                "EVENT_CONTEXT",
-                "DESCRIPTIONS",
-            ),
-            event_context_colours: get_colour_array(raw_parameters, "EVENT_CONTEXT", "COLOURS"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ManufacturerVersion {
-    String(String),
-    Float(f32),
-    Array(Vec<u16>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ApplicationParameters {
-    pub analog_gain: Option<Vec<i16>>,
-    pub manufacturer_company: Option<String>,
-    pub manufacturer_software: Option<String>,
-    pub manufacturer_version: Option<ManufacturerVersion>,
-    pub manufacturer_edited: Option<Vec<String>>,
-    pub point_x_screen: Option<[char; 2]>,
-    pub point_y_screen: Option<[char; 2]>,
-    pub seg_marker_diameter: Option<f32>,
-    pub seg_data_limits: Option<Array2<f32>>,
-    pub seg_acc_factor: Option<f32>,
-    pub seg_noise_factor: Option<f32>,
-    pub seg_residual_error_factor: Option<f32>,
-    pub seg_intersection_limit: Option<f32>,
-}
-
-impl ApplicationParameters {
-    pub fn new() -> Self {
-        ApplicationParameters {
-            analog_gain: None,
-            manufacturer_company: None,
-            manufacturer_software: None,
-            manufacturer_version: None,
-            manufacturer_edited: None,
-            point_x_screen: None,
-            point_y_screen: None,
-            seg_marker_diameter: None,
-            seg_data_limits: None,
-            seg_acc_factor: None,
-            seg_noise_factor: None,
-            seg_residual_error_factor: None,
-            seg_intersection_limit: None,
-        }
-    }
-
-    pub fn from_raw(
-        raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
-    ) -> Self {
-        ApplicationParameters {
-            analog_gain: get_signed_integer_vec(raw_parameters, "ANALOG", "GAIN"),
-            manufacturer_company: get_string(raw_parameters, "MANUFACTURER", "COMPANY"),
-            manufacturer_software: get_string(raw_parameters, "MANUFACTURER", "SOFTWARE"),
-            manufacturer_version: None, // TODO
-            manufacturer_edited: get_string_vec(raw_parameters, "MANUFACTURER", "EDITED"),
-            point_x_screen: get_char_pair(raw_parameters, "POINT", "X_SCREEN"),
-            point_y_screen: get_char_pair(raw_parameters, "POINT", "Y_SCREEN"),
-            seg_marker_diameter: get_float(raw_parameters, "SEG", "MARKER_DIAMETER"),
-            seg_data_limits: get_float_array2(raw_parameters, "SEG", "DATA_LIMITS"),
-            seg_acc_factor: get_float(raw_parameters, "SEG", "ACC_FACTOR"),
-            seg_noise_factor: get_float(raw_parameters, "SEG", "NOISE_FACTOR"),
-            seg_residual_error_factor: get_float(raw_parameters, "SEG", "RESIDUAL_ERROR_FACTOR"),
-            seg_intersection_limit: get_float(raw_parameters, "SEG", "INTERSECTION_LIMIT"),
         }
     }
 }

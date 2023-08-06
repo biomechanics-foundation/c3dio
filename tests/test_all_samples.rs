@@ -6,7 +6,9 @@ use std::path::PathBuf;
 #[test]
 fn test_all_sample_files() {
     let top_dir = "tests/c3d.org-sample-files";
-    let ignored_paths = vec!["tests/c3d.org-sample-files/Sample18/bad_parameter_section.c3d"];
+    let ignored_paths = vec![
+        "tests/c3d.org-sample-files/Sample18/bad_parameter_section.c3d",
+    ];
     let mut files = Vec::new();
     let mut dirs: Vec<PathBuf> = Vec::new();
     dirs.push(PathBuf::from(top_dir));
