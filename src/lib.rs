@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::path::PathBuf;
 use std::{error::Error, fmt};
 
@@ -58,8 +57,7 @@ impl fmt::Display for C3dParseError {
 
 #[derive(Debug)]
 pub struct C3d {
-    pub file_path: PathBuf,
-    pub file: Option<File>,
+    pub file_path: Option<PathBuf>,
     pub bytes: Bytes,
     pub parameters: Parameters,
     pub processor: Processor,

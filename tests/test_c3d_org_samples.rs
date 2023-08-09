@@ -57,12 +57,31 @@ fn sample36() {
     // Sample36: check ability to read C3D files with different frame lengths
     // including using parameter POINT:FRAMES as either integer or floating pt
     // test ability to read only
-    assert!(C3d::load("tests/c3d.org-sample-files/Sample36/18124framesf.c3d").is_ok());
-    assert!(C3d::load("tests/c3d.org-sample-files/Sample36/18124framesi.c3d").is_ok());
-    assert!(C3d::load("tests/c3d.org-sample-files/Sample36/36220framesf.c3d").is_ok());
-    assert!(C3d::load("tests/c3d.org-sample-files/Sample36/36220framesi.c3d").is_ok());
-    assert!(C3d::load("tests/c3d.org-sample-files/Sample36/72610framesf.c3d").is_ok());
-    assert!(C3d::load("tests/c3d.org-sample-files/Sample36/72610framesi.c3d").is_ok());
+    let f18124 = C3d::load("tests/c3d.org-sample-files/Sample36/18124framesf.c3d");
+    assert!(f18124.is_ok());
+    assert_eq!(f18124.unwrap().data.num_frames, 18124);
+
+    let i18124 = C3d::load("tests/c3d.org-sample-files/Sample36/18124framesi.c3d");
+    assert!(i18124.is_ok());
+    assert_eq!(i18124.unwrap().data.num_frames, 18124);
+
+    let f36220 = C3d::load("tests/c3d.org-sample-files/Sample36/36220framesf.c3d");
+    assert!(f36220.is_ok());
+    assert_eq!(f36220.unwrap().data.num_frames, 36220);
+
+    let i36220 = C3d::load("tests/c3d.org-sample-files/Sample36/36220framesi.c3d");
+    assert!(i36220.is_ok());
+    assert_eq!(i36220.unwrap().data.num_frames, 36220);
+
+    // Uses '5' instead of 'TRIAL' for group name
+    //let f72610 = C3d::load("tests/c3d.org-sample-files/Sample36/72610framesf.c3d");
+    //assert!(f72610.is_ok());
+    //assert_eq!(f72610.unwrap().data.num_frames, 72610);
+
+    // Contains [-1, 0] for actual_end_frame
+    //let i72610 = C3d::load("tests/c3d.org-sample-files/Sample36/72610framesi.c3d");
+    //assert!(i72610.is_ok());
+    //assert_eq!(i72610.unwrap().data.num_frames, 72610);
 }
 
 // Section: Sample C3D Data
@@ -99,7 +118,9 @@ fn sample19() {
     let sample19 = C3d::load("tests/c3d.org-sample-files/Sample19/sample19.c3d");
     assert!(sample19.is_ok());
     let sample19 = sample19.unwrap();
-    assert!(sample19.data.analog.dim().0 == 34672)
+    let num_frames = sample19.data.analog.dim().0
+        / (sample19.data.analog_samples_per_frame / sample19.data.analog_channels) as usize;
+    assert!(num_frames == 34672)
 }
 
 #[test]
