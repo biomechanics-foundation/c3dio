@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use nalgebra::{DMatrix, DVector, Matrix6};
+
 use crate::processor::Processor;
 use crate::C3dParseError;
-use ndarray::{Array, Array2, Array3, ArrayView, Ix2, Ix3, IxDyn, Order};
+//use ndarray::{Array, Array2, Array3, ArrayView, Ix2, Ix3, IxDyn, Order};
 
 #[derive(Debug, Clone)]
 pub struct Parameters {
@@ -23,14 +25,14 @@ impl Parameters {
         Parameters {
             group_descriptions: HashMap::new(),
             raw_parameters: HashMap::new(),
-            point: PointParameters::new(),
-            analog: AnalogParameters::new(),
-            force_platform: ForcePlatformParameters::new(),
+            point: PointParameters::default(),
+            analog: AnalogParameters::default(),
+            force_platform: ForcePlatformParameters::default(),
             trial: TrialParameters::new(),
             event: EventParameters::new(),
             event_context: EventContextParameters::new(),
             manufacturer: ManufacturerParameters::new(),
-            seg: SegParameters::new(),
+            seg: SegParameters::default(),
         }
     }
 
@@ -92,6 +94,12 @@ pub enum AnalogOffset {
     Unsigned(Vec<u16>),
 }
 
+impl Default for AnalogOffset {
+    fn default() -> Self {
+        AnalogOffset::Signed(Vec::new())
+    }
+}
+
 impl AnalogOffset {
     fn from_raw(
         raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
@@ -140,7 +148,7 @@ impl ForcePlatformType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PointParameters {
     pub used: u16,
     pub scale: f32,
@@ -172,28 +180,12 @@ impl PartialEq for PointParameters {
 }
 
 impl PointParameters {
-    pub fn new() -> Self {
-        PointParameters {
-            used: 0,
-            scale: 0.0,
-            rate: 0.0,
-            data_start: 0,
-            frames: 0,
-            labels: Vec::new(),
-            descriptions: Vec::new(),
-            units: [' '; 4],
-            long_frames: None,
-            x_screen: None,
-            y_screen: None,
-        }
-    }
-
     pub fn from_raw(
         raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
     ) -> Result<Self, C3dParseError> {
         let used = get_signed_integer(raw_parameters, "POINT", "USED");
         if used.is_none() || used.unwrap() == 0 {
-            return Ok(PointParameters::new());
+            return Ok(PointParameters::default());
         }
         let mut frames = get_signed_integer(raw_parameters, "POINT", "FRAMES");
         if frames.is_none() {
@@ -224,8 +216,9 @@ impl PointParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum AnalogFormat {
+    #[default]
     Signed,
     Unsigned,
 }
@@ -246,7 +239,7 @@ impl AnalogFormat {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct AnalogParameters {
     pub used: u16,
     pub labels: Vec<String>,
@@ -262,28 +255,12 @@ pub struct AnalogParameters {
 }
 
 impl AnalogParameters {
-    pub fn new() -> Self {
-        AnalogParameters {
-            used: 0,
-            labels: Vec::new(),
-            descriptions: Vec::new(),
-            gen_scale: 1.0,
-            offset: AnalogOffset::Signed(Vec::new()),
-            units: Vec::new(),
-            scale: Vec::new(),
-            rate: 0.0,
-            format: AnalogFormat::Signed,
-            bits: 0,
-            gain: None,
-        }
-    }
-
     pub fn from_raw(
         raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
     ) -> Result<Self, C3dParseError> {
         let used = get_signed_integer(raw_parameters, "ANALOG", "USED");
         if used.is_none() || used.unwrap() == 0 {
-            return Ok(AnalogParameters::new());
+            return Ok(AnalogParameters::default());
         }
         let format = AnalogFormat::from_raw(raw_parameters);
         let offset = AnalogOffset::from_raw(raw_parameters, &format)?;
@@ -323,13 +300,15 @@ impl ForcePlatformCorners {
         let mut corners = Vec::new();
         let data = get_or_err(raw_parameters, "FORCE_PLATFORM", "CORNERS")?;
         match data {
-            ParameterData::Float(data) => {
-                if data.ndim() == 3 {
-                    for i in 0..data.shape()[2] {
+            ParameterData::Float(data, dimensions) => {
+                if dimensions.len() == 3 {
+                    for i in 0..dimensions[2] {
                         let mut corner = [0.0; 12];
-                        for j in 0..data.shape()[0] {
-                            for k in 0..data.shape()[1] {
-                                corner[j * data.shape()[1] + k] = data[[j, k, i]];
+                        for j in 0..dimensions[0] {
+                            for k in 0..dimensions[1] {
+                                let index =
+                                    i * (dimensions[0] * dimensions[1]) + j * dimensions[1] + k;
+                                corner[j * dimensions[1] + k] = data[index];
                             }
                         }
                         corners.push(corner);
@@ -366,12 +345,12 @@ impl ForcePlatformOrigin {
         let mut origin = Vec::new();
         let data = get_or_err(raw_parameters, "FORCE_PLATFORM", "ORIGIN")?;
         match data {
-            ParameterData::Float(data) => {
-                if data.ndim() == 2 {
-                    for i in 0..data.shape()[1] {
+            ParameterData::Float(data, dimensions) => {
+                if dimensions.len() == 2 {
+                    for i in 0..dimensions[1] {
                         let mut origin_point = [0.0; 3];
-                        for j in 0..data.shape()[0] {
-                            origin_point[j] = data[[j, i]];
+                        for j in 0..dimensions[0] {
+                            origin_point[j] = data[j * dimensions[1] + i];
                         }
                         origin.push(origin_point);
                     }
@@ -391,36 +370,24 @@ impl ForcePlatformOrigin {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ForcePlatformParameters {
     pub used: u16,
     pub plate_type: Option<Vec<ForcePlatformType>>,
     pub zero: Option<[u16; 2]>,
     pub corners: Option<ForcePlatformCorners>,
     pub origin: Option<ForcePlatformOrigin>,
-    pub channel: Option<Array2<i16>>,
-    pub cal_matrix: Option<Array3<f32>>,
+    pub channel: Option<DMatrix<i16>>,
+    pub cal_matrix: Option<Vec<Matrix6<f32>>>,
 }
 
 impl ForcePlatformParameters {
-    pub fn new() -> Self {
-        ForcePlatformParameters {
-            used: 0,
-            plate_type: None,
-            zero: None,
-            corners: None,
-            origin: None,
-            channel: None,
-            cal_matrix: None,
-        }
-    }
-
     pub fn from_raw(
         raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
     ) -> Result<Self, C3dParseError> {
         let used = get_signed_integer(raw_parameters, "FORCE_PLATFORM", "USED");
         if used.is_none() || used.unwrap() == 0 {
-            return Ok(ForcePlatformParameters::new());
+            return Ok(ForcePlatformParameters::default());
         }
         let plate_type = ForcePlatformType::from_raw(raw_parameters)?;
         let corners = ForcePlatformCorners::from_raw(raw_parameters)?;
@@ -434,7 +401,7 @@ impl ForcePlatformParameters {
             corners: Some(corners),
             origin: Some(origin),
             channel,
-            cal_matrix: get_float_array3(raw_parameters, "FORCE_PLATFORM", "CAL_MATRIX"),
+            cal_matrix: get_cal_matrix_vector(raw_parameters, "FORCE_PLATFORM", "CAL_MATRIX"),
         };
         Ok(force_platform_parameters)
     }
@@ -465,7 +432,7 @@ impl TrialParameters {
             if end_field.len() != 2 {
                 None
             } else {
-            Some(end_field[0] as u16 as usize + (end_field[1] as u16 * 65535) as usize)
+                Some(end_field[0] as u16 as usize + (end_field[1] as u16 * 65535) as usize)
             }
         } else {
             None
@@ -593,7 +560,7 @@ impl ManufacturerParameters {
 
     pub fn from_raw(
         raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
-        ) -> Self {
+    ) -> Self {
         ManufacturerParameters {
             company: get_string(raw_parameters, "MANUFACTURER", "COMPANY"),
             software: get_string(raw_parameters, "MANUFACTURER", "SOFTWARE"),
@@ -603,10 +570,10 @@ impl ManufacturerParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct SegParameters {
     pub marker_diameter: Option<f32>,
-    pub data_limits: Option<Array2<f32>>,
+    pub data_limits: Option<DMatrix<f32>>,
     pub acc_factor: Option<f32>,
     pub noise_factor: Option<f32>,
     pub residual_error_factor: Option<f32>,
@@ -614,20 +581,9 @@ pub struct SegParameters {
 }
 
 impl SegParameters {
-    pub fn new() -> Self {
-        SegParameters {
-            marker_diameter: None,
-            data_limits: None,
-            acc_factor: None,
-            noise_factor: None,
-            residual_error_factor: None,
-            intersection_limit: None,
-        }
-    }
-
     pub fn from_raw(
         raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
-        ) -> Self {
+    ) -> Self {
         SegParameters {
             marker_diameter: get_float(raw_parameters, "SEG", "MARKER_DIAMETER"),
             data_limits: get_float_array2(raw_parameters, "SEG", "DATA_LIMITS"),
@@ -643,7 +599,7 @@ impl TryFrom<ParameterData> for u16 {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data) => {
+            ParameterData::Integer(data, dimensions) => {
                 if data.len() == 1 {
                     Ok(data[0] as u16)
                 } else {
@@ -659,7 +615,7 @@ impl TryFrom<ParameterData> for [u16; 2] {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data) => {
+            ParameterData::Integer(data, dimensions) => {
                 if data.len() == 2 {
                     Ok([data[0] as u16, data[1] as u16])
                 } else {
@@ -675,8 +631,8 @@ impl TryFrom<ParameterData> for Vec<u16> {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data) => {
-                if data.ndim() == 1 {
+            ParameterData::Integer(data, dimensions) => {
+                if dimensions.len() == 1 {
                     Ok(data.iter().map(|x| *x as u16).collect())
                 } else {
                     Err(C3dParseError::InvalidData("Vec<u16>".to_string()))
@@ -691,7 +647,7 @@ impl TryFrom<ParameterData> for i16 {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data) => {
+            ParameterData::Integer(data, dimensions) => {
                 if data.len() == 1 {
                     Ok(data[0])
                 } else {
@@ -707,9 +663,9 @@ impl TryFrom<ParameterData> for Vec<i16> {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data) => {
-                if data.ndim() == 1 {
-                    Ok(data.to_owned().into_raw_vec())
+            ParameterData::Integer(data, dimensions) => {
+                if dimensions.len() == 1 {
+                    Ok(data.into_iter().map(|&x| x as i16).collect())
                 } else {
                     Err(C3dParseError::InvalidData("Vec<i16>".to_string()))
                 }
@@ -723,7 +679,7 @@ impl TryFrom<ParameterData> for f32 {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Float(data) => {
+            ParameterData::Float(data, dimensions) => {
                 if data.len() == 1 {
                     Ok(data[0])
                 } else {
@@ -739,9 +695,9 @@ impl TryFrom<ParameterData> for Vec<f32> {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Float(data) => {
-                if data.ndim() == 1 {
-                    Ok(data.to_owned().into_raw_vec())
+            ParameterData::Float(data, dimensions) => {
+                if dimensions.len() == 1 {
+                    Ok(data.into_iter().map(|&x| x as f32).collect())
                 } else {
                     Err(C3dParseError::InvalidData("Vec<f32>".to_string()))
                 }
@@ -755,10 +711,10 @@ impl TryFrom<ParameterData> for String {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Char(data) => {
+            ParameterData::Char(data, dimensions) => {
                 let mut string = String::new();
-                for c in data {
-                    string.push(c);
+                for c in 0..data.len() {
+                    string.push(data[c]);
                 }
                 Ok(string)
             }
@@ -771,13 +727,17 @@ impl TryFrom<ParameterData> for Vec<String> {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Char(data) => {
-                if data.ndim() == 2 || data.ndim() == 1 {
+            ParameterData::Char(data, dimensions) => {
+                if dimensions.len() == 2 || dimensions.len() == 1 {
                     let mut strings = Vec::new();
-                    for row in data.rows() {
+                    let num_strings = match dimensions.len() == 1 {
+                        True => 1,
+                        False => dimensions[1],
+                    };
+                    for row in 0..num_strings {
                         let mut string = String::new();
-                        for c in row {
-                            string.push(*c);
+                        for c in 0..dimensions[0] {
+                            string.push(data[row * dimensions[0] + c]);
                         }
                         strings.push(string);
                     }
@@ -795,7 +755,7 @@ impl TryFrom<ParameterData> for [char; 4] {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Char(data) => {
+            ParameterData::Char(data, dimensions) => {
                 let mut chars = [' '; 4];
                 for (i, c) in data.iter().enumerate() {
                     if i >= 4 {
@@ -814,19 +774,15 @@ impl TryFrom<ParameterData> for Vec<[char; 4]> {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Char(data) => {
-                if data.ndim() == 2 {
+            ParameterData::Char(data, dimensions) => {
+                if dimensions.len() == 2 && dimensions[1] == 4 {
                     let mut chars = Vec::new();
-                    for row in data.rows() {
-                        if row.len() == 4 {
-                            let mut chars_row = [' '; 4];
-                            for (i, c) in row.iter().enumerate() {
-                                chars_row[i] = *c;
-                            }
-                            chars.push(chars_row);
-                        } else {
-                            return Err(C3dParseError::InvalidData("Vec<[char; 4]>".to_string()));
+                    for row in 0..data.len() % 4 {
+                        let mut chars_row = [' '; 4];
+                        for i in 0..4 {
+                            chars_row[i] = data[row * 4 + i];
                         }
+                        chars.push(chars_row);
                     }
                     Ok(chars)
                 } else {
@@ -873,9 +829,9 @@ fn get_float(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Float(data) => {
+        ParameterData::Float(data, dimensions) => {
             if data.len() == 1 {
-                data.first().cloned()
+                Some(data[0])
             } else {
                 None
             }
@@ -892,9 +848,9 @@ pub fn get_float_vec(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Float(data) => {
-            if data.ndim() == 1 {
-                Some(data.to_owned().into_raw_vec())
+        ParameterData::Float(data, dimensions) => {
+            if dimensions.len() == 1 {
+                Some(data.into_iter().map(|&x| x as f32).collect())
             } else {
                 None
             }
@@ -907,18 +863,18 @@ pub fn get_float_array2(
     raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
     group_name: &str,
     parameter_name: &str,
-) -> Option<Array2<f32>> {
+) -> Option<DMatrix<f32>> {
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Float(data) => {
-            if data.ndim() == 2 {
-                let array = data.clone().into_dimensionality::<Ix2>();
-                if array.is_ok() {
-                    Some(array.unwrap().to_owned())
-                } else {
-                    None
-                }
+        ParameterData::Float(data, dimensions) => {
+            if dimensions.len() == 2 {
+                let array = DMatrix::from_iterator(
+                    dimensions[0],
+                    dimensions[1],
+                    data.into_iter().map(|&x| x as f32),
+                );
+                Some(array)
             } else {
                 None
             }
@@ -927,22 +883,24 @@ pub fn get_float_array2(
     }
 }
 
-pub fn get_float_array3(
+pub fn get_cal_matrix_vector(
     raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
     group_name: &str,
     parameter_name: &str,
-) -> Option<Array3<f32>> {
+) -> Option<Vec<Matrix6<f32>>> {
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Float(data) => {
-            if data.ndim() == 2 {
-                let array = data.clone().into_dimensionality::<Ix3>();
-                if array.is_ok() {
-                    Some(array.unwrap().to_owned())
-                } else {
-                    None
+        ParameterData::Float(data, dimensions) => {
+            if dimensions.len() == 3 {
+                let mut array = Vec::new();
+                let data_array: Vec<f32> = data.into_iter().map(|&x| x as f32).collect();
+                for platform in 0..data.len() % 36 {
+                    array.push(Matrix6::from_vec(
+                        data_array[platform * 36..(platform + 1) * 36].into(),
+                    ));
                 }
+                Some(array)
             } else {
                 None
             }
@@ -959,9 +917,9 @@ pub fn get_signed_integer(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Integer(data) => {
+        ParameterData::Integer(data, dimensions) => {
             if data.len() == 1 {
-                data.first().cloned()
+                Some(data[0])
             } else {
                 None
             }
@@ -978,9 +936,9 @@ pub fn get_signed_integer_vec(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Integer(data) => {
-            if data.ndim() == 1 {
-                Some(data.to_owned().into_raw_vec())
+        ParameterData::Integer(data, dimensions) => {
+            if dimensions.len() == 1 {
+                Some(data.into_iter().map(|&x| x as i16).collect())
             } else {
                 None
             }
@@ -993,18 +951,18 @@ pub fn get_signed_integer_array2(
     raw_parameters: &HashMap<String, HashMap<String, (ParameterData, String)>>,
     group_name: &str,
     parameter_name: &str,
-) -> Option<Array2<i16>> {
+) -> Option<DMatrix<i16>> {
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Integer(data) => {
-            if data.ndim() == 2 {
-                let array = data.clone().into_dimensionality::<Ix2>();
-                if array.is_ok() {
-                    Some(array.unwrap().to_owned())
-                } else {
-                    None
-                }
+        ParameterData::Integer(data, dimensions) => {
+            if dimensions.len() == 2 {
+                let array = DMatrix::from_iterator(
+                    dimensions[0],
+                    dimensions[1],
+                    data.into_iter().map(|&x| x as i16),
+                );
+                Some(array)
             } else {
                 None
             }
@@ -1021,8 +979,8 @@ fn get_string(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Char(data) => {
-            if data.ndim() == 1 {
+        ParameterData::Char(data, dimensions) => {
+            if dimensions.len() == 1 {
                 let mut string = String::new();
                 for c in data {
                     string.push(*c as char);
@@ -1044,13 +1002,13 @@ fn get_string_vec(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Char(data) => {
-            if data.ndim() == 2 {
+        ParameterData::Char(data, dimensions) => {
+            if dimensions.len() == 2 {
                 let mut strings = Vec::new();
-                for column in data.columns() {
+                for column in 0..dimensions[0] {
                     let mut string = String::new();
-                    for c in column {
-                        string.push(*c as char);
+                    for c in 0..dimensions[1] {
+                        string.push(data[column * dimensions[1] + c] as char);
                     }
                     strings.push(string);
                 }
@@ -1071,8 +1029,8 @@ fn get_char_pair(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Char(data) => {
-            if data.ndim() == 1 {
+        ParameterData::Char(data, dimensions) => {
+            if dimensions.len() == 1 {
                 let mut chars = [0 as char; 2];
                 chars[0] = data[0] as char;
                 chars[1] = data[1] as char;
@@ -1093,7 +1051,7 @@ fn get_char_quad(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Char(data) => {
+        ParameterData::Char(data, dimensions) => {
             if data.len() == 4 {
                 let mut chars = [0 as char; 4];
                 chars[0] = data[0] as char;
@@ -1117,13 +1075,13 @@ fn get_times_array(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Float(data) => {
-            if data.ndim() == 2 && data.len() > 1 {
+        ParameterData::Float(data, dimensions) => {
+            if dimensions.len() == 2 && data.len() > 1 {
                 let mut times = Vec::new();
-                for row in data.rows() {
+                for row in 0..data.len() % 2 {
                     let mut time = [0.0; 2];
-                    time[0] = row[0];
-                    time[1] = row[1];
+                    time[0] = data[row * 2];
+                    time[1] = data[row * 2 + 1];
                     times.push(time);
                 }
                 Some(times)
@@ -1143,14 +1101,14 @@ fn get_colour_array(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Byte(data) => {
-            if data.ndim() == 2 {
+        ParameterData::Byte(data, dimensions) => {
+            if dimensions.len() == 2 {
                 let mut colours = Vec::new();
-                for row in data.rows() {
+                for row in 0..data.len() % 3 {
                     let mut colour = [0; 3];
-                    colour[0] = row[0];
-                    colour[1] = row[1];
-                    colour[2] = row[2];
+                    colour[0] = data[row * 3];
+                    colour[1] = data[row * 3 + 1];
+                    colour[2] = data[row * 3 + 2];
                     colours.push(colour);
                 }
                 Some(colours)
@@ -1197,38 +1155,10 @@ impl TryFrom<i8> for DataType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParameterData {
-    Char(Array<char, IxDyn>),
-    Byte(Array<u8, IxDyn>),
-    Integer(Array<i16, IxDyn>),
-    Float(Array<f32, IxDyn>),
-}
-
-pub enum CharParameterData {
-    Char(Array<char, IxDyn>),
-}
-
-impl From<Array<char, IxDyn>> for ParameterData {
-    fn from(array: Array<char, IxDyn>) -> Self {
-        ParameterData::Char(array)
-    }
-}
-
-impl From<Array<u8, IxDyn>> for ParameterData {
-    fn from(array: Array<u8, IxDyn>) -> Self {
-        ParameterData::Byte(array)
-    }
-}
-
-impl From<Array<i16, IxDyn>> for ParameterData {
-    fn from(array: Array<i16, IxDyn>) -> Self {
-        ParameterData::Integer(array)
-    }
-}
-
-impl From<Array<f32, IxDyn>> for ParameterData {
-    fn from(array: Array<f32, IxDyn>) -> Self {
-        ParameterData::Float(array)
-    }
+    Char(DVector<char>, Vec<usize>),
+    Byte(DVector<u8>, Vec<usize>),
+    Integer(DVector<i16>, Vec<usize>),
+    Float(DVector<f32>, Vec<usize>),
 }
 
 impl ParameterData {
@@ -1251,62 +1181,28 @@ impl ParameterData {
         if dimensions.len() == 0 {
             dimensions.push(1);
         }
-        let shape = IxDyn(dimensions.as_slice());
         let array = match data_type {
             DataType::Char => {
-                let data = data.iter().map(|&x| x as char).collect::<Vec<char>>();
-                let array = ArrayView::<char, IxDyn>::from_shape(
-                    IxDyn(vec![data.len()].as_slice()),
-                    data.as_slice(),
-                )
-                .unwrap();
-                let array = array
-                    .to_shape(((shape), Order::ColumnMajor))
-                    .unwrap()
-                    .to_owned();
-                ParameterData::Char(array)
+                let array = DVector::from_iterator(data.len(), data.iter().map(|&x| x as char));
+                ParameterData::Char(array, dimensions)
             }
             DataType::Byte => {
-                let array =
-                    ArrayView::<u8, IxDyn>::from_shape(IxDyn(vec![data.len()].as_slice()), data)
-                        .unwrap();
-                let array = array
-                    .to_shape(((shape), Order::ColumnMajor))
-                    .unwrap()
-                    .to_owned();
-                ParameterData::from(array)
+                let array = DVector::from_row_slice(data);
+                ParameterData::Byte(array, dimensions)
             }
             DataType::Integer => {
-                let data = data
-                    .chunks(2)
-                    .map(|x| processor.i16(x.try_into().unwrap()))
-                    .collect::<Vec<i16>>();
-                let array = ArrayView::<i16, IxDyn>::from_shape(
-                    IxDyn(vec![data.len()].as_slice()),
-                    data.as_slice(),
-                )
-                .unwrap();
-                let array = array
-                    .to_shape(((shape), Order::ColumnMajor))
-                    .unwrap()
-                    .to_owned();
-                ParameterData::Integer(array)
+                let array = DVector::from_iterator(
+                    data.len() / 2,
+                    data.chunks(2).map(|x| processor.i16(x.try_into().unwrap())),
+                );
+                ParameterData::Integer(array, dimensions)
             }
             DataType::Float => {
-                let data = data
-                    .chunks(4)
-                    .map(|x| processor.f32(x.try_into().unwrap()))
-                    .collect::<Vec<f32>>();
-                let array = ArrayView::<f32, IxDyn>::from_shape(
-                    IxDyn(vec![data.len()].as_slice()),
-                    data.as_slice(),
-                )
-                .unwrap();
-                let array = array
-                    .to_shape(((shape), Order::ColumnMajor))
-                    .unwrap()
-                    .to_owned();
-                ParameterData::Float(array)
+                let array = DVector::from_iterator(
+                    data.len() / 4,
+                    data.chunks(4).map(|x| processor.f32(x.try_into().unwrap())),
+                );
+                ParameterData::Float(array, dimensions)
             }
         };
 

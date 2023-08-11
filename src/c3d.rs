@@ -206,21 +206,11 @@ impl C3d {
 
     fn parse_data_bytes(mut self) -> Result<C3d, C3dParseError> {
         self.data.point_frames = match self.parameters.get_data("POINT", "FRAMES") {
-            Some(ParameterData::Integer(frames)) => {
-                let frames = frames.first();
-                if let Some(&frames) = frames {
-                    frames as u16 as usize
-                } else {
-                    0
-                }
+            Some(ParameterData::Integer(frames, _)) => {
+                frames[0] as u16 as usize
             }
-            Some(ParameterData::Float(frames)) => {
-                let frames = frames.first();
-                if let Some(&frames) = frames {
-                    frames as u16 as usize
-                } else {
-                    0
-                }
+            Some(ParameterData::Float(frames, _)) => {
+                frames[0] as u16 as usize
             }
             _ => 0,
         };

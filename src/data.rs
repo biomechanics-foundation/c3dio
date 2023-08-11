@@ -1,4 +1,3 @@
-use std::ops::{DivAssign, MulAssign, SubAssign};
 
 use crate::processor::Processor;
 use crate::{
@@ -8,13 +7,13 @@ use crate::{
     },
     C3dParseError,
 };
-use ndarray::{Array, Array2, Array3};
+use nalgebra::{DMatrix, SVector, Vector3};
 
 #[derive(Debug, Clone)]
 pub struct Data {
-    pub points: Array3<f32>,
-    pub cameras: Array3<bool>,
-    pub residuals: Array2<f32>,
+    pub points: DMatrix<Vector3<f32>>,
+    pub cameras: DMatrix<SVector<bool, 7>>,
+    pub residuals: DMatrix<f32>,
     pub num_frames: usize,
     pub point_frames: usize,
     pub frame_rate: f32,
@@ -24,7 +23,7 @@ pub struct Data {
     pub last_frame: u16,
     pub points_per_frame: u16,
     pub format: DataFormat,
-    pub analog: Array2<f32>,
+    pub analog: DMatrix<f32>,
     pub analog_labels: Vec<String>,
     pub analog_channels: u16,
     pub analog_samples_per_frame: u16,
@@ -51,19 +50,20 @@ impl PartialEq for Data {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum DataFormat {
     Float,
     Integer,
+    #[default]
     Unknown,
 }
 
 impl Data {
     pub fn new() -> Data {
         Data {
-            points: Array3::zeros((0, 0, 0)),
-            cameras: Array3::from_elem((0, 0, 0), false),
-            residuals: Array2::zeros((0, 0)),
+            points: DMatrix::from_vec(0, 0, vec![]),
+            cameras: DMatrix::from_vec(0, 0, vec![]),
+            residuals: DMatrix::from_vec(0, 0, vec![]),
             num_frames: 0,
             point_frames: 0,
             frame_rate: 0.0,
@@ -73,7 +73,7 @@ impl Data {
             last_frame: 0,
             points_per_frame: 0,
             format: DataFormat::Unknown,
-            analog: Array2::zeros((0, 0)),
+            analog: DMatrix::from_vec(0, 0, vec![]),
             analog_labels: Vec::new(),
             analog_channels: 0,
             analog_samples_per_frame: 0,
@@ -165,18 +165,18 @@ impl Data {
         data_bytes: &[u8],
         processor: &Processor,
     ) -> Result<&mut Self, C3dParseError> {
-        let mut point_data: Array3<f32> =
-            Array::zeros((self.num_frames as usize, self.points_per_frame as usize, 3));
-        let mut cameras: Array3<bool> = Array::from_elem(
-            (self.num_frames as usize, self.points_per_frame as usize, 7),
-            false,
+        let mut point_data: DMatrix<Vector3<f32>> = DMatrix::from_element(
+            self.num_frames as usize,
+            self.points_per_frame as usize,
+            Vector3::from_element(0.),
         );
-        let mut residual: Array2<f32> =
-            Array::zeros((self.num_frames as usize, self.points_per_frame as usize));
-
-        let mut camera_iter = cameras.iter_mut();
-        let mut residual_iter = residual.iter_mut();
-        let mut point_iter = point_data.iter_mut();
+        let mut cameras: DMatrix<SVector<bool, 7>> = DMatrix::from_element(
+            self.num_frames as usize,
+            self.points_per_frame as usize,
+            SVector::<bool, 7>::from_element(false),
+        );
+        let mut residual: DMatrix<f32> =
+            DMatrix::from_element(self.num_frames as usize, self.points_per_frame as usize, 0.);
 
         let bytes_per_frame = self.point_bytes_per_frame + self.analog_bytes_per_frame;
         let bytes_per_point: u16 = match self.points_per_frame {
@@ -192,32 +192,30 @@ impl Data {
                 let start = j * bytes_per_point;
                 let end = start + bytes_per_point;
                 let point_slice = &point_frame_data[start as usize..end as usize];
-                let (x, y, z, cameras, residual) = match self.format {
+                let (x, y, z, temp_cameras, temp_residual) = match self.format {
                     DataFormat::Float => parse_point_data_float(point_slice, processor),
                     DataFormat::Integer => parse_point_data_int(point_slice, processor),
                     DataFormat::Unknown => {
                         return Err(C3dParseError::UnknownDataFormat);
                     }
                 };
-                *point_iter.next().unwrap() = x;
-                *point_iter.next().unwrap() = y;
-                *point_iter.next().unwrap() = z;
-                for k in 0..7 {
-                    *camera_iter.next().unwrap() = cameras[k];
-                }
-                *residual_iter.next().unwrap() = residual;
+                let temp_vec3 = match self.format {
+                    DataFormat::Integer => Vector3::from_vec(vec![
+                        x * self.scale_factor,
+                        y * self.scale_factor,
+                        z * self.scale_factor,
+                    ]),
+                    _ => Vector3::from_vec(vec![x, y, z]),
+                };
+                let temp_camera = SVector::from_vec(temp_cameras.into_iter().collect());
+                let index = (i * self.points_per_frame as usize) + j as usize;
+                residual[index] = temp_residual;
+                point_data[index] = temp_vec3;
+                cameras[index] = temp_camera;
             }
         }
 
-        match self.format {
-            DataFormat::Integer => {
-                point_data *= self.scale_factor;
-                self.points = point_data;
-            }
-            _ => {
-                self.points = point_data;
-            }
-        }
+        self.points = point_data;
 
         Ok(self)
     }
@@ -233,17 +231,12 @@ impl Data {
         } else {
             0
         };
-        let mut analog_data: Array2<f32> = Array::zeros((
+
+        let mut analog_data: DMatrix<f32> = DMatrix::from_element(
             self.num_frames * analog_samples_per_channel_per_frame,
             self.analog_channels as usize,
-        ));
-        let mut analog_iter = analog_data.iter_mut();
-
-        let analog_samples_per_channel_per_frame = if self.analog_channels > 0 {
-            (self.analog_samples_per_frame / self.analog_channels) as usize
-        } else {
-            0
-        };
+            0.,
+        );
 
         let bytes_per_frame = self.point_bytes_per_frame + self.analog_bytes_per_frame;
         let bytes_per_analog_point = match self.analog_samples_per_frame {
@@ -258,7 +251,7 @@ impl Data {
                 let start = j * bytes_per_analog_point * analog_samples_per_channel_per_frame;
                 let end = start + bytes_per_analog_point * analog_samples_per_channel_per_frame;
                 let analog_slice = &analog_frame_data[start as usize..end as usize];
-                let analog_data = match self.format {
+                let temp_analog_data = match self.format {
                     DataFormat::Float => parse_analog_data_float(
                         analog_slice,
                         analog_samples_per_channel_per_frame,
@@ -273,8 +266,11 @@ impl Data {
                         return Err(C3dParseError::UnknownDataFormat);
                     }
                 };
+                let index =
+                    (i * self.analog_channels as usize * analog_samples_per_channel_per_frame)
+                        + (j * analog_samples_per_channel_per_frame);
                 for k in 0..analog_samples_per_channel_per_frame {
-                    *analog_iter.next().unwrap() = analog_data[k as usize];
+                    analog_data[index + k] = temp_analog_data[k as usize];
                 }
             }
         }
@@ -282,19 +278,18 @@ impl Data {
             Signed(offset) => offset.len(),
             Unsigned(offset) => offset.len(),
         };
-        if offset_len == parameters.analog.scale.len() && offset_len == analog_data.shape()[1] {
+        if offset_len == parameters.analog.scale.len() && offset_len == analog_data.shape().1 {
             analog_data
-                .columns_mut()
-                .into_iter()
+                .column_iter_mut()
                 .enumerate()
                 .for_each(|(i, mut column)| {
                     match &parameters.analog.offset {
-                        Signed(offset) => column.sub_assign(offset[i] as f32),
-                        Unsigned(offset) => column.sub_assign(offset[i] as f32),
-                    }
-                    column.mul_assign(parameters.analog.scale[i]);
+                        Signed(offset) => column.add_scalar_mut(-offset[i] as f32),
+                        Unsigned(offset) => column.add_scalar_mut(-(offset[i] as f32)),
+                    };
+                    column.scale_mut(parameters.analog.scale[i]);
                 });
-            analog_data.div_assign(parameters.analog.gen_scale);
+            analog_data /= parameters.analog.gen_scale;
         }
         self.analog = analog_data;
         Ok(self)

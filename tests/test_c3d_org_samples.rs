@@ -118,7 +118,7 @@ fn sample19() {
     let sample19 = C3d::load("tests/c3d.org-sample-files/Sample19/sample19.c3d");
     assert!(sample19.is_ok());
     let sample19 = sample19.unwrap();
-    let num_frames = sample19.data.analog.dim().0
+    let num_frames = sample19.data.analog.shape().0
         / (sample19.data.analog_samples_per_frame / sample19.data.analog_channels) as usize;
     assert!(num_frames == 34672)
 }
