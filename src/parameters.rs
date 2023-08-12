@@ -50,7 +50,6 @@ impl Parameters {
         let event_context = EventContextParameters::from_raw(&raw_parameters);
         let manufacturer = ManufacturerParameters::from_raw(&raw_parameters);
         let seg = SegParameters::from_raw(&raw_parameters);
-        dbg!(&raw_parameters);
         Ok(Parameters {
             group_descriptions,
             raw_parameters,

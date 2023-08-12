@@ -208,10 +208,9 @@ impl Data {
                     _ => Vector3::from_vec(vec![x, y, z]),
                 };
                 let temp_camera = SVector::from_vec(temp_cameras.into_iter().collect());
-                let index = (i * self.points_per_frame as usize) + j as usize;
-                residual[index] = temp_residual;
-                point_data[index] = temp_vec3;
-                cameras[index] = temp_camera;
+                residual[(i, j as usize)] = temp_residual;
+                point_data[(i, j as usize)] = temp_vec3;
+                cameras[(i, j as usize)] = temp_camera;
             }
         }
 
