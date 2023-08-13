@@ -20,6 +20,10 @@ use events::Events;
 use parameters::Parameters;
 use processor::Processor;
 
+pub mod prelude {
+    pub use crate::{parameters::ParameterData, C3d, C3dParseError};
+}
+
 #[derive(Debug)]
 pub enum C3dParseError {
     ReadError(std::io::Error),
