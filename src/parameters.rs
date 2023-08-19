@@ -1004,10 +1004,10 @@ fn get_string_vec(
         ParameterData::Char(data, dimensions) => {
             if dimensions.len() == 2 {
                 let mut strings = Vec::new();
-                for column in 0..dimensions[0] {
+                for column in 0..dimensions[1] {
                     let mut string = String::new();
-                    for c in 0..dimensions[1] {
-                        string.push(data[column * dimensions[1] + c] as char);
+                    for c in 0..dimensions[0] {
+                        string.push(data[column * dimensions[0] + c] as char);
                     }
                     strings.push(string);
                 }
