@@ -9,6 +9,9 @@ use crate::{
 };
 use nalgebra::{DMatrix, SVector, Vector3};
 
+/// A struct containing the data from a C3D file
+/// after it has been parsed.
+/// The data is stored with nalgebra matrices.
 #[derive(Debug, Clone)]
 pub struct Data {
     pub points: DMatrix<Vector3<f32>>,
