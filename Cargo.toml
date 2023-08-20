@@ -1,6 +1,7 @@
 [package]
 name = "c3dio"
 version = "0.1.0"
+authors = ["Claire V. Hammond <claire@biomech.dev>"]
 edition = "2021"
 categories = ["encoding", "filesystem", "parser-implementation", "motion-capture", "biomechanics"]
 description = "A library for reading and writing C3D files."
