@@ -5,7 +5,7 @@
 //!
 //! # Examples
 //! ```
-//! use c3d::prelude::*;
+//! use c3dio::prelude::*;
 //!
 //! let c3d = C3d::load("tests/data/short.c3d");
 //! assert!(c3d.is_ok());
@@ -80,9 +80,9 @@ impl fmt::Display for C3dParseError {
 /// # Examples
 ///
 /// ```
-/// use c3d::prelude::*;
-/// use std::path::PathBuf;
-/// let c3d = C3d::load(PathBuf::from("tests/data/short.c3d"));
+/// use c3dio::prelude::*;
+///
+/// let c3d = C3d::load("tests/data/short.c3d");
 /// assert!(c3d.is_ok());
 /// ```
 #[derive(Debug)]
