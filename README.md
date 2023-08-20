@@ -1,5 +1,7 @@
 # c3dio
 
+![Crates.io](https://img.shields.io/crates/v/c3dio.svg)
+
 A c3d parser and eventually also a writer and editor written in Rust. It can be compiled to WebAssembly and, as a result, is **available in 20+ languages**.
 
 ## Usage
