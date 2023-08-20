@@ -4,8 +4,12 @@ use nalgebra::{DMatrix, DVector, Matrix6};
 
 use crate::processor::Processor;
 use crate::C3dParseError;
-//use ndarray::{Array, Array2, Array3, ArrayView, Ix2, Ix3, IxDyn, Order};
 
+/// The parameters of a C3D file are stored in a `Parameters` struct.
+/// Each group of parameters is stored in a separate struct.
+/// The `raw_parameters` field is a `HashMap` of `HashMap`s.
+/// The first key is the group name, and the second key is the parameter name.
+/// The value is a tuple of the parameter data and the description.
 #[derive(Debug, Clone)]
 pub struct Parameters {
     pub group_descriptions: HashMap<String, String>,
@@ -68,6 +72,7 @@ impl Parameters {
         get_signed_integer_vec(&self.raw_parameters, group, parameter)
     }
 
+    /// Returns the value of a group and parameter as a `ParameterData` enum.
     pub fn get_data(&self, group: &str, parameter: &str) -> Option<ParameterData> {
         get(&self.raw_parameters, group, parameter)
     }
@@ -1152,6 +1157,9 @@ impl TryFrom<i8> for DataType {
     }
 }
 
+/// All parameter data is stored as a vector of bytes, but the data type and dimensions of the data
+/// are also stored in the file. This struct stores the data type and dimensions, and provides
+/// methods to convert the data to a more useful format.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParameterData {
     Char(DVector<char>, Vec<usize>),

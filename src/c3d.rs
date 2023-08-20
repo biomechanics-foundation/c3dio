@@ -19,6 +19,7 @@ impl PartialEq for C3d {
 }
 
 impl C3d {
+    /// Parses a C3D file from a file path.
     pub fn load(file_name: &str) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?;
         let (c3d, mut file) = c3d.open_file(file_name)?;
@@ -29,6 +30,7 @@ impl C3d {
             .parse_data(file)?)
     }
 
+    /// Parses a C3D file from a byte slice.
     pub fn from_bytes(bytes: &[u8]) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?
             .parse_basic_info_from_bytes(bytes)?
@@ -39,12 +41,17 @@ impl C3d {
         Ok(c3d)
     }
 
+    /// Parses a C3D file with just the header data.
     pub fn load_header(file_name: &str) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?;
         let (c3d, mut file) = c3d.open_file(file_name)?;
         Ok(c3d.parse_basic_info(&mut file)?.parse_header()?)
     }
 
+    /// Parses a C3D file with just the header and parameter data.
+    /// The parameter data cannot be parsed without the header data.
+    /// The parameter data is parsed into a `Parameters` struct.
+    /// The `Parameters` struct can be accessed via the `parameters` field.
     pub fn load_parameters(file_name: &str) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new()?;
         let (c3d, mut file) = c3d.open_file(file_name)?;
@@ -221,6 +228,9 @@ impl C3d {
     }
 }
 
+/// The steps in the process of loading and parsing a C3D file.
+/// This is used in conjunction with the `test_load_file` function
+/// to determine where a file failed to load or parse.
 #[derive(Debug, PartialEq)]
 pub enum ProcessStep {
     MakeEmpty,
@@ -232,6 +242,9 @@ pub enum ProcessStep {
     Complete,
 }
 
+/// A rudimentary test to check that a file can be loaded and parsed.
+/// This is not a comprehensive test, but it is a good first check.
+/// It is not intended to be used as a unit test.
 pub fn test_load_file(file_name: &str) -> ProcessStep {
     let c3d = match C3d::new() {
         Ok(c3d) => c3d,

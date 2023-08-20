@@ -1,12 +1,25 @@
+/// # Events
+///
+/// Events are time points in the C3D file that are marked with a label.
+/// The label is a 4-character string that can be used to identify the event.
+/// The label is optional, and if it is not present, the event is still marked
+/// with a time point.
+/// The events are stored in the C3D file header.
+
+/// The `Events` struct contains the events from the C3D file header.
+/// Event information can be included in the parameter section of the C3D file
+/// as well, that information is stored in the `Parameter` struct.
 use crate::processor::Processor;
 use crate::C3dParseError;
 
+/// The `Events` struct contains the events from the C3D file header.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Events {
     pub supports_events_labels: bool,
     events: Vec<Event>,
 }
 
+/// The `Event` struct contains the information for a single event.
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct Event {
     pub label: [char; 4],
