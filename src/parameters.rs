@@ -603,7 +603,7 @@ impl TryFrom<ParameterData> for u16 {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data, dimensions) => {
+            ParameterData::Integer(data, _dimensions) => {
                 if data.len() == 1 {
                     Ok(data[0] as u16)
                 } else {
@@ -619,7 +619,7 @@ impl TryFrom<ParameterData> for [u16; 2] {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data, dimensions) => {
+            ParameterData::Integer(data, _dimensions) => {
                 if data.len() == 2 {
                     Ok([data[0] as u16, data[1] as u16])
                 } else {
@@ -651,7 +651,7 @@ impl TryFrom<ParameterData> for i16 {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Integer(data, dimensions) => {
+            ParameterData::Integer(data, _dimensions) => {
                 if data.len() == 1 {
                     Ok(data[0])
                 } else {
@@ -683,7 +683,7 @@ impl TryFrom<ParameterData> for f32 {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Float(data, dimensions) => {
+            ParameterData::Float(data, _dimensions) => {
                 if data.len() == 1 {
                     Ok(data[0])
                 } else {
@@ -715,7 +715,7 @@ impl TryFrom<ParameterData> for String {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Char(data, dimensions) => {
+            ParameterData::Char(data, _dimensions) => {
                 let mut string = String::new();
                 for c in 0..data.len() {
                     string.push(data[c]);
@@ -735,8 +735,8 @@ impl TryFrom<ParameterData> for Vec<String> {
                 if dimensions.len() == 2 || dimensions.len() == 1 {
                     let mut strings = Vec::new();
                     let num_strings = match dimensions.len() == 1 {
-                        True => 1,
-                        False => dimensions[1],
+                        true => 1,
+                        false => dimensions[1],
                     };
                     for row in 0..num_strings {
                         let mut string = String::new();
@@ -759,7 +759,7 @@ impl TryFrom<ParameterData> for [char; 4] {
     type Error = C3dParseError;
     fn try_from(data: ParameterData) -> Result<Self, Self::Error> {
         match data {
-            ParameterData::Char(data, dimensions) => {
+            ParameterData::Char(data, _dimensions) => {
                 let mut chars = [' '; 4];
                 for (i, c) in data.iter().enumerate() {
                     if i >= 4 {
@@ -833,7 +833,7 @@ fn get_float(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Float(data, dimensions) => {
+        ParameterData::Float(data, _dimensions) => {
             if data.len() == 1 {
                 Some(data[0])
             } else {
@@ -921,7 +921,7 @@ pub fn get_signed_integer(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Integer(data, dimensions) => {
+        ParameterData::Integer(data, _dimensions) => {
             if data.len() == 1 {
                 Some(data[0])
             } else {
@@ -1055,7 +1055,7 @@ fn get_char_quad(
     let group = raw_parameters.get(group_name)?;
     let parameter = group.get(parameter_name)?;
     match &parameter.0 {
-        ParameterData::Char(data, dimensions) => {
+        ParameterData::Char(data, _dimensions) => {
             if data.len() == 4 {
                 let mut chars = [0 as char; 4];
                 chars[0] = data[0] as char;
