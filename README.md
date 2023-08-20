@@ -1,6 +1,6 @@
 # c3dio
 
-A c3d parser, writer and editor written in Rust and **available in 20+ languages**.
+A c3d parser and eventually also a writer and editor written in Rust. It can be compiled to WebAssembly and, as a result, is **available in 20+ languages**.
 
 ## Usage
 
@@ -15,7 +15,7 @@ Load only the parameters/header (no data):
 
 ```
 use c3dio::{C3d, C3dParseError};
-let c3d_parameters = C3d::parameters("test.c3d");
+let c3d_parameters = C3d::load_parameters("test.c3d");
 ```
 
 ## Contributing
