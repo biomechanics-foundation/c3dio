@@ -8,14 +8,14 @@ A c3d parser and eventually also a writer and editor written in Rust. It can be 
 
 Load a c3d file:
 
-```
+```rust
 use c3dio::{C3d, C3dParseError};
 let c3d_data = C3d::load("test.c3d");
 ```
 
 Load only the parameters/header (no data):
 
-```
+```rust
 use c3dio::{C3d, C3dParseError};
 let c3d_parameters = C3d::load_parameters("test.c3d");
 ```
