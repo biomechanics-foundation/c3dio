@@ -101,10 +101,10 @@ impl C3d {
                 .u16([self.bytes.header[16], self.bytes.header[17]]) as usize;
 
         let mut parameter_bytes_tail = Vec::with_capacity(
-            (self.bytes.data_start_block_index - self.bytes.parameter_start_block_index) * 512,
+            (self.bytes.data_start_block_index - self.bytes.parameter_start_block_index - 1) * 512,
         ) as Vec<u8>;
 
-        for _ in 0..(self.bytes.data_start_block_index - self.bytes.parameter_start_block_index)
+        for _ in 0..(self.bytes.data_start_block_index - self.bytes.parameter_start_block_index - 1)
         {
             let mut block = [0u8; 512];
             file.read_exact(&mut block)
