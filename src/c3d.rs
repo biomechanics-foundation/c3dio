@@ -32,13 +32,11 @@ impl C3d {
 
     /// Parses a C3D file from a byte slice.
     pub fn from_bytes(bytes: &[u8]) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::new()?
+        Ok(C3d::new()?
             .parse_basic_info_from_bytes(bytes)?
             .parse_header()?
             .parse_parameters()?
-            .parse_data_from_bytes(bytes)?;
-
-        Ok(c3d)
+            .parse_data_from_bytes(bytes)?)
     }
 
     /// Parses a C3D file with just the header data.
@@ -148,7 +146,7 @@ impl C3d {
             return Err(C3dParseError::InsufficientBlocks("data".to_string()));
         }
 
-        self.bytes.parameter = bytes[512..(512 * (self.bytes.data_start_block_index))]
+        self.bytes.parameter = bytes[512..(512 * (self.bytes.data_start_block_index - 1))]
             .try_into()
             .unwrap();
 
@@ -203,7 +201,7 @@ impl C3d {
     }
 
     fn parse_data_from_bytes(mut self, bytes: &[u8]) -> Result<C3d, C3dParseError> {
-        let data_start_byte = 512 * (self.bytes.data_start_block_index);
+        let data_start_byte = 512 * (self.bytes.data_start_block_index - 1);
         if bytes.len() < data_start_byte {
             return Err(C3dParseError::InsufficientBlocks("data".to_string()));
         }
