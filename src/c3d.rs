@@ -101,10 +101,10 @@ impl C3d {
                 .u16([self.bytes.header[16], self.bytes.header[17]]) as usize;
 
         let mut parameter_bytes_tail = Vec::with_capacity(
-            (self.bytes.data_start_block_index - self.bytes.parameter_start_block_index - 1) * 512,
+            (self.bytes.data_start_block_index - self.bytes.parameter_start_block_index) * 512,
         ) as Vec<u8>;
 
-        for _ in 0..(self.bytes.data_start_block_index - self.bytes.parameter_start_block_index - 1)
+        for _ in 0..(self.bytes.data_start_block_index - self.bytes.parameter_start_block_index)
         {
             let mut block = [0u8; 512];
             file.read_exact(&mut block)
@@ -133,7 +133,7 @@ impl C3d {
 
         self.bytes.parameter_start_block_index = self.bytes.header[0] as usize;
 
-        if bytes.len() < 512 * (self.bytes.parameter_start_block_index + 1) {
+        if bytes.len() < 512 * (self.bytes.parameter_start_block_index) {
             return Err(C3dParseError::InsufficientBlocks("parameter".to_string()));
         }
         let parameter_start_block = &bytes[512..1024];
@@ -144,11 +144,11 @@ impl C3d {
             self.processor
                 .u16([self.bytes.header[16], self.bytes.header[17]]) as usize;
 
-        if bytes.len() < 512 * (self.bytes.data_start_block_index + 1) {
+        if bytes.len() < 512 * (self.bytes.data_start_block_index) {
             return Err(C3dParseError::InsufficientBlocks("data".to_string()));
         }
 
-        self.bytes.parameter = bytes[512..(512 * (self.bytes.data_start_block_index + 1))]
+        self.bytes.parameter = bytes[512..(512 * (self.bytes.data_start_block_index))]
             .try_into()
             .unwrap();
 
@@ -203,7 +203,7 @@ impl C3d {
     }
 
     fn parse_data_from_bytes(mut self, bytes: &[u8]) -> Result<C3d, C3dParseError> {
-        let data_start_byte = 512 * (self.bytes.data_start_block_index + 1);
+        let data_start_byte = 512 * (self.bytes.data_start_block_index);
         if bytes.len() < data_start_byte {
             return Err(C3dParseError::InsufficientBlocks("data".to_string()));
         }
