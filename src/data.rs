@@ -1,4 +1,3 @@
-
 use crate::processor::Processor;
 use crate::{
     parameters::{
@@ -28,7 +27,7 @@ pub struct Data {
     pub format: DataFormat,
     pub analog: DMatrix<f32>,
     pub analog_labels: Vec<String>,
-    pub analog_channels: u16,
+    pub analog_samples_per_channel_per_frame: u16,
     pub analog_samples_per_frame: u16,
     pub point_bytes_per_frame: usize,
     pub analog_bytes_per_frame: usize,
@@ -48,7 +47,8 @@ impl PartialEq for Data {
             && self.points_per_frame == other.points_per_frame
             && self.analog == other.analog
             && self.analog_labels == other.analog_labels
-            && self.analog_channels == other.analog_channels
+            && self.analog_samples_per_channel_per_frame
+                == other.analog_samples_per_channel_per_frame
             && self.analog_samples_per_frame == other.analog_samples_per_frame
     }
 }
@@ -78,7 +78,7 @@ impl Data {
             format: DataFormat::Unknown,
             analog: DMatrix::from_vec(0, 0, vec![]),
             analog_labels: Vec::new(),
-            analog_channels: 0,
+            analog_samples_per_channel_per_frame: 0,
             analog_samples_per_frame: 0,
             point_bytes_per_frame: 0,
             analog_bytes_per_frame: 0,
@@ -228,15 +228,9 @@ impl Data {
         parameters: &Parameters,
         processor: &Processor,
     ) -> Result<&mut Self, C3dParseError> {
-        let analog_samples_per_channel_per_frame = if self.analog_channels > 0 {
-            (self.analog_samples_per_frame / self.analog_channels) as usize
-        } else {
-            0
-        };
-
         let mut analog_data: DMatrix<f32> = DMatrix::from_element(
-            self.num_frames * analog_samples_per_channel_per_frame,
-            self.analog_channels as usize,
+            self.num_frames * self.analog_samples_per_channel_per_frame as usize,
+            parameters.analog.used as usize,
             0.,
         );
 
@@ -249,30 +243,30 @@ impl Data {
             let start = i * bytes_per_frame as usize;
             let end = start + bytes_per_frame as usize;
             let analog_frame_data = &data_bytes[start + self.point_bytes_per_frame as usize..end];
-            for j in 0..self.analog_channels as usize {
-                let start = j * bytes_per_analog_point * analog_samples_per_channel_per_frame;
-                let end = start + bytes_per_analog_point * analog_samples_per_channel_per_frame;
+            for j in 0..self.analog_samples_per_channel_per_frame {
+                let start = j as usize * bytes_per_analog_point * parameters.analog.used as usize;
+                let end = start + (bytes_per_analog_point * parameters.analog.used as usize);
                 let analog_slice = &analog_frame_data[start as usize..end as usize];
                 let temp_analog_data = match self.format {
                     DataFormat::Float => parse_analog_data_float(
                         analog_slice,
-                        analog_samples_per_channel_per_frame,
+                        parameters.analog.used as usize,
                         processor,
                     ),
                     DataFormat::Integer => parse_analog_data_int(
                         analog_slice,
-                        analog_samples_per_channel_per_frame,
+                        parameters.analog.used as usize,
                         processor,
                     ),
                     DataFormat::Unknown => {
                         return Err(C3dParseError::UnknownDataFormat);
                     }
                 };
-                let index =
-                    (i * self.analog_channels as usize * analog_samples_per_channel_per_frame)
-                        + (j * analog_samples_per_channel_per_frame);
-                for k in 0..analog_samples_per_channel_per_frame {
-                    analog_data[index + k] = temp_analog_data[k as usize];
+                for k in 0..parameters.analog.used as usize {
+                    analog_data[(
+                        i * self.analog_samples_per_channel_per_frame as usize + j as usize,
+                        k,
+                    )] = temp_analog_data[k];
                 }
             }
         }
@@ -280,20 +274,21 @@ impl Data {
             Signed(offset) => offset.len(),
             Unsigned(offset) => offset.len(),
         };
-        if offset_len == parameters.analog.scale.len() && offset_len == analog_data.shape().1 {
-            analog_data
-                .column_iter_mut()
-                .enumerate()
-                .for_each(|(i, mut column)| {
-                    match &parameters.analog.offset {
-                        Signed(offset) => column.add_scalar_mut(-offset[i] as f32),
-                        Unsigned(offset) => column.add_scalar_mut(-(offset[i] as f32)),
-                    };
-                    column.scale_mut(parameters.analog.scale[i]);
-                });
-            analog_data /= parameters.analog.gen_scale;
+        if offset_len != parameters.analog.scale.len() {
+            return Err(C3dParseError::AnalogOffsetScaleMismatch);
         }
-        self.analog = analog_data;
+        if analog_data.shape().1 <= offset_len {
+            for (i, mut col) in analog_data.column_iter_mut().enumerate() {
+                match &parameters.analog.offset {
+                    Signed(offset) => col.add_scalar_mut(-(offset[i] as f32)),
+                    Unsigned(offset) => col.add_scalar_mut(-(offset[i] as f32)),
+                };
+                col *= parameters.analog.scale[i];
+            }
+        } else {
+            return Err(C3dParseError::AnalogOffsetScaleMismatch);
+        }
+        self.analog = analog_data * parameters.analog.gen_scale;
         Ok(self)
     }
 

@@ -172,7 +172,7 @@ impl C3d {
         self.data.scale_factor = self
             .processor
             .f32(self.bytes.header[12..16].try_into().unwrap());
-        self.data.analog_channels = self
+        self.data.analog_samples_per_channel_per_frame = self
             .processor
             .u16(self.bytes.header[18..20].try_into().unwrap());
         self.data.frame_rate = self

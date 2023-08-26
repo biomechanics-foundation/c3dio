@@ -65,6 +65,7 @@ pub enum C3dParseError {
     RequiredParameterNotFound(String),
     InvalidData(String),
     InvalidParameterFormat(String),
+    AnalogOffsetScaleMismatch,
 }
 
 impl Error for C3dParseError {}
