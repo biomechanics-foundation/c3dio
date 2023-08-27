@@ -286,7 +286,7 @@ impl Data {
                 col *= parameters.analog.scale[i];
             }
         } else {
-            return Err(C3dParseError::AnalogOffsetScaleMismatch);
+            return Err(C3dParseError::InsufficientAnalogOffsets);
         }
         self.analog = analog_data * parameters.analog.gen_scale;
         Ok(self)
