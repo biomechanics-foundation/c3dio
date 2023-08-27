@@ -1,6 +1,6 @@
 [package]
 name = "c3dio"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Claire V. Hammond <claire@biomech.dev>"]
 edition = "2021"
 categories = ["science", "simulation", "parser-implementations", "game-development", "science::robotics"]
