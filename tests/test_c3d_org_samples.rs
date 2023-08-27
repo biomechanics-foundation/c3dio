@@ -119,7 +119,7 @@ fn sample19() {
     assert!(sample19.is_ok());
     let sample19 = sample19.unwrap();
     let num_frames = sample19.data.analog.shape().0
-        / (sample19.data.analog_samples_per_frame / sample19.data.analog_channels) as usize;
+        / (sample19.data.analog_samples_per_channel_per_frame) as usize;
     assert!(num_frames == 34672)
 }
 
