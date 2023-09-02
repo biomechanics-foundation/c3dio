@@ -61,8 +61,8 @@ pub enum DataFormat {
     Unknown,
 }
 
-impl Data {
-    pub fn new() -> Data {
+impl Default for Data {
+    fn default() -> Self {
         Data {
             points: DMatrix::from_vec(0, 0, vec![]),
             cameras: DMatrix::from_vec(0, 0, vec![]),
@@ -83,6 +83,12 @@ impl Data {
             point_bytes_per_frame: 0,
             analog_bytes_per_frame: 0,
         }
+    }
+}
+
+impl Data {
+    pub fn new() -> Data {
+        Data::default()
     }
 
     fn calc_num_frames(

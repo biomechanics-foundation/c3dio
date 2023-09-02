@@ -13,26 +13,29 @@ use crate::processor::Processor;
 use crate::C3dParseError;
 
 /// The `Events` struct contains the events from the C3D file header.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Events {
     pub supports_events_labels: bool,
     events: Vec<Event>,
 }
 
 /// The `Event` struct contains the information for a single event.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 struct Event {
     pub label: [char; 4],
     pub display_flag: bool,
     pub time: f32,
 }
 
+impl Event {
+    pub fn new() -> Event {
+        Event::default()
+    }
+}
+
 impl Events {
     pub fn new() -> Events {
-        Events {
-            supports_events_labels: false,
-            events: Vec::new(),
-        }
+        Events::default()
     }
 
     pub fn from_header_block(

@@ -1,23 +1,22 @@
 use crate::C3dParseError;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct Processor {
     pub processor_type: ProcessorType,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub enum ProcessorType {
     Dec,
     Intel,
     SgiMips,
+    #[default]
     Unknown,
 }
 
 impl Processor {
     pub fn new() -> Processor {
-        Processor {
-            processor_type: ProcessorType::Unknown,
-        }
+        Processor::default()
     }
     pub fn from_parameter_start_block(
         parameter_start_block: [u8; 512],

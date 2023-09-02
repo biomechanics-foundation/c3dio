@@ -87,7 +87,7 @@ impl fmt::Display for C3dParseError {
 /// let c3d = C3d::load("tests/data/short.c3d");
 /// assert!(c3d.is_ok());
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct C3d {
     pub file_path: Option<PathBuf>,
     bytes: Bytes,

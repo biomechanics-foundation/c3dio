@@ -1,7 +1,5 @@
 use crate::parameters::{ParameterData, Parameters};
 
-use crate::bytes::Bytes;
-use crate::data::Data;
 use crate::events::Events;
 use crate::processor::Processor;
 use crate::{C3d, C3dParseError};
@@ -21,7 +19,7 @@ impl PartialEq for C3d {
 impl C3d {
     /// Parses a C3D file from a file path.
     pub fn load(file_name: &str) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::new()?;
+        let c3d = C3d::new();
         let (c3d, mut file) = c3d.open_file(file_name)?;
         Ok(c3d
             .parse_basic_info(&mut file)?
@@ -32,7 +30,7 @@ impl C3d {
 
     /// Parses a C3D file from a byte slice.
     pub fn from_bytes(bytes: &[u8]) -> Result<C3d, C3dParseError> {
-        Ok(C3d::new()?
+        Ok(C3d::new()
             .parse_basic_info_from_bytes(bytes)?
             .parse_header()?
             .parse_parameters()?
@@ -41,7 +39,7 @@ impl C3d {
 
     /// Parses a C3D file with just the header data.
     pub fn load_header(file_name: &str) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::new()?;
+        let c3d = C3d::new();
         let (c3d, mut file) = c3d.open_file(file_name)?;
         Ok(c3d.parse_basic_info(&mut file)?.parse_header()?)
     }
@@ -51,27 +49,22 @@ impl C3d {
     /// The parameter data is parsed into a `Parameters` struct.
     /// The `Parameters` struct can be accessed via the `parameters` field.
     pub fn load_parameters(file_name: &str) -> Result<C3d, C3dParseError> {
-        let c3d = C3d::new()?;
+        let c3d = C3d::new();
         let (c3d, mut file) = c3d.open_file(file_name)?;
-        Ok(c3d.parse_basic_info(&mut file)?
+        Ok(c3d
+            .parse_basic_info(&mut file)?
             .parse_header()?
             .parse_parameters()?)
     }
 
-    pub fn new() -> Result<C3d, C3dParseError> {
-        Ok(C3d {
-            file_path: None,
-            bytes: Bytes::new(),
-            parameters: Parameters::new(),
-            processor: Processor::new(),
-            data: Data::new(),
-            events: Events::new(),
-        })
+    pub fn new() -> C3d {
+        C3d::default()
     }
 
     fn open_file(mut self, file_name: &str) -> Result<(C3d, File), C3dParseError> {
         self.file_path = Some(PathBuf::from(file_name));
-        let file = File::open(self.file_path.clone().unwrap()).map_err(|e| C3dParseError::ReadError(e))?;
+        let file =
+            File::open(self.file_path.clone().unwrap()).map_err(|e| C3dParseError::ReadError(e))?;
         Ok((self, file))
     }
 
@@ -211,12 +204,8 @@ impl C3d {
 
     fn parse_data_bytes(mut self) -> Result<C3d, C3dParseError> {
         self.data.point_frames = match self.parameters.get_data("POINT", "FRAMES") {
-            Some(ParameterData::Integer(frames, _)) => {
-                frames[0] as u16 as usize
-            }
-            Some(ParameterData::Float(frames, _)) => {
-                frames[0] as u16 as usize
-            }
+            Some(ParameterData::Integer(frames, _)) => frames[0] as u16 as usize,
+            Some(ParameterData::Float(frames, _)) => frames[0] as u16 as usize,
             _ => 0,
         };
 
@@ -231,7 +220,6 @@ impl C3d {
 /// to determine where a file failed to load or parse.
 #[derive(Debug, PartialEq)]
 pub enum ProcessStep {
-    MakeEmpty,
     LoadFile,
     ParseBasicInfo,
     ParseHeader,
@@ -244,10 +232,7 @@ pub enum ProcessStep {
 /// This is not a comprehensive test, but it is a good first check.
 /// It is not intended to be used as a unit test.
 pub fn test_load_file(file_name: &str) -> ProcessStep {
-    let c3d = match C3d::new() {
-        Ok(c3d) => c3d,
-        Err(_) => return ProcessStep::MakeEmpty,
-    };
+    let c3d = C3d::new();
     let (c3d, mut file) = match c3d.open_file(file_name) {
         Ok(c3d) => c3d,
         Err(_) => return ProcessStep::LoadFile,

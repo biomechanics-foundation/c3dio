@@ -10,7 +10,7 @@ use crate::C3dParseError;
 /// The `raw_parameters` field is a `HashMap` of `HashMap`s.
 /// The first key is the group name, and the second key is the parameter name.
 /// The value is a tuple of the parameter data and the description.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Parameters {
     pub group_descriptions: HashMap<String, String>,
     pub raw_parameters: HashMap<String, HashMap<String, (ParameterData, String)>>,
@@ -26,18 +26,7 @@ pub struct Parameters {
 
 impl Parameters {
     pub fn new() -> Parameters {
-        Parameters {
-            group_descriptions: HashMap::new(),
-            raw_parameters: HashMap::new(),
-            point: PointParameters::default(),
-            analog: AnalogParameters::default(),
-            force_platform: ForcePlatformParameters::default(),
-            trial: TrialParameters::new(),
-            event: EventParameters::new(),
-            event_context: EventContextParameters::new(),
-            manufacturer: ManufacturerParameters::new(),
-            seg: SegParameters::default(),
-        }
+        Parameters::default()
     }
 
     pub fn parse_parameter_blocks(
@@ -286,16 +275,14 @@ impl AnalogParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ForcePlatformCorners {
     corners: Vec<[f32; 12]>,
 }
 
 impl ForcePlatformCorners {
     pub fn new() -> Self {
-        ForcePlatformCorners {
-            corners: Vec::new(),
-        }
+        ForcePlatformCorners::default()
     }
 
     pub fn from_raw(
@@ -333,14 +320,14 @@ impl ForcePlatformCorners {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ForcePlatformOrigin {
     origin: Vec<[f32; 3]>,
 }
 
 impl ForcePlatformOrigin {
     pub fn new() -> Self {
-        ForcePlatformOrigin { origin: Vec::new() }
+        ForcePlatformOrigin::default()
     }
 
     pub fn from_raw(
@@ -411,7 +398,7 @@ impl ForcePlatformParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct TrialParameters {
     pub actual_start_field: Option<usize>,
     pub actual_end_field: Option<usize>,
@@ -420,11 +407,7 @@ pub struct TrialParameters {
 
 impl TrialParameters {
     pub fn new() -> Self {
-        TrialParameters {
-            actual_start_field: None,
-            actual_end_field: None,
-            camera_rate: None,
-        }
+        TrialParameters::default()
     }
 
     pub fn from_raw(
@@ -461,7 +444,7 @@ impl TrialParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventParameters {
     pub used: Option<i16>,
     pub contexts: Option<Vec<String>>,
@@ -475,16 +458,7 @@ pub struct EventParameters {
 
 impl EventParameters {
     pub fn new() -> Self {
-        EventParameters {
-            used: None,
-            contexts: None,
-            labels: None,
-            descriptions: None,
-            times: None,
-            subjects: None,
-            icon_ids: None,
-            generic_flags: None,
-        }
+        EventParameters::default()
     }
 
     pub fn from_raw(
@@ -503,7 +477,7 @@ impl EventParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventContextParameters {
     pub used: Option<i16>,
     pub icon_ids: Option<Vec<u16>>,
@@ -514,13 +488,7 @@ pub struct EventContextParameters {
 
 impl EventContextParameters {
     pub fn new() -> Self {
-        EventContextParameters {
-            used: None,
-            icon_ids: None,
-            labels: None,
-            descriptions: None,
-            colours: None,
-        }
+        EventContextParameters::default()
     }
 
     pub fn from_raw(
@@ -544,7 +512,7 @@ pub enum ManufacturerVersion {
     Array(Vec<u16>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ManufacturerParameters {
     pub company: Option<String>,
     pub software: Option<String>,
@@ -554,12 +522,7 @@ pub struct ManufacturerParameters {
 
 impl ManufacturerParameters {
     pub fn new() -> Self {
-        ManufacturerParameters {
-            company: None,
-            software: None,
-            version: None,
-            edited: None,
-        }
+        ManufacturerParameters::default()
     }
 
     pub fn from_raw(
