@@ -2,7 +2,7 @@
 
 ![Crates.io](https://img.shields.io/crates/v/c3dio.svg)
 
-A c3d parser and eventually also a writer and editor written in Rust. It can be compiled to WebAssembly and, as a result, is **available in 20+ languages**.
+A c3d parser, writer and editor written in Rust.
 
 ## Usage
 
@@ -26,4 +26,6 @@ PRs, feature requests, and issues are welcome!
 
 ## Support
 
-c3dio is part of the [biomech.dev](https://biomech.dev) family of open-source libraries. Consider supporting our work to help us contribute more to the body of biomechanics software.
+`c3dio` is a stand-alone crate used in [Chiron](https://chiron.rs), an open-source biomechanics simulation and modeling package supported by the Biomechanics Foundation.
+
+Consider supporting our work to help us contribute more to the body of biomechanics software.

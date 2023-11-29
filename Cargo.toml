@@ -1,12 +1,12 @@
 [package]
 name = "c3dio"
-version = "0.3.0"
-authors = ["Claire V. Hammond <claire@biomech.dev>"]
+version = "0.6.0"
+authors = ["Claire V. Hammond <me@cvhammond.com>"]
 edition = "2021"
 categories = ["science", "simulation", "parser-implementations", "game-development", "science::robotics"]
-description = "A library for reading and writing C3D files."
+description = "A library for reading and writing C3D motion capture files."
 license = "MIT OR Apache-2.0"
-homepage = "https://biomech.dev/c3dio"
+homepage = "https://chiron.rs/c3dio"
 repository = "https://github.com/cvhammond/c3dio"
 readme = "README.md"
 keywords = ["c3d", "parser", "motion-capture", "mocap", "biomechanics"]
@@ -15,5 +15,15 @@ exclude = ["tests", "tests/*", "examples", "examples/*"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = "0.32"
+grid = "0.10"
 
+[dev-dependencies]
+test-files = "0.1.2"
+
+[[example]]
+name = "write-simple"
+path = "examples/write-simple.rs"
+
+[[example]]
+name = "read-write"
+path = "examples/read-write.rs"

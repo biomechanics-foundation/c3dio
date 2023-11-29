@@ -14,27 +14,41 @@
 use std::path::PathBuf;
 use std::{error::Error, fmt};
 
-#[path = "bytes.rs"]
-mod bytes;
+#[path = "analog.rs"]
+pub mod analog;
 #[path = "c3d.rs"]
 pub mod c3d;
 #[path = "data.rs"]
 pub mod data;
 #[path = "events.rs"]
 pub mod events;
+#[path = "forces.rs"]
+pub mod forces;
+#[path = "manufacturer.rs"]
+pub mod manufacturer;
 #[path = "parameters.rs"]
 pub mod parameters;
+#[path = "points.rs"]
+pub mod points;
 #[path = "processor.rs"]
 mod processor;
+#[path = "seg.rs"]
+pub mod seg;
 
-use bytes::Bytes;
-use data::Data;
+#[path = "file_formats/mod.rs"]
+pub mod file_formats;
+
+use analog::Analog;
 use events::Events;
-use parameters::Parameters;
+use forces::ForcePlatforms;
+use manufacturer::Manufacturer;
+use parameters::{Parameter, Parameters};
+use points::Points;
 use processor::Processor;
+use seg::Seg;
 
 pub mod prelude {
-    pub use crate::{parameters::ParameterData, C3d, C3dParseError};
+    pub use crate::{parameters::ParameterData, C3d, C3dIoError, C3dParseError};
 }
 
 /// Reports errors that occurred while parsing a C3D file.
@@ -50,29 +64,64 @@ pub enum C3dParseError {
     InvalidProcessorType,
     InvalidDataType,
     InvalidParametersOffset,
+    InvalidDescription,
     MissingGroup(String),
     MissingParameter(String),
-    UnknownDataFormat,
     InvalidGroupId,
     MissingPointScale,
     FileNotOpen,
     NotEnoughData,
     InvalidNextParameter,
-    TooManyEvents(usize),
+    TooManyEvents(i16),
     NumFramesMismatch(usize, usize),
     GroupNotFound(String),
     ParameterNotFound(String, String),
     RequiredParameterNotFound(String),
-    InvalidData(String),
+    InvalidData(Parameter, String),
     InvalidParameterFormat(String),
     AnalogOffsetScaleMismatch,
     InsufficientAnalogOffsets,
+    InvalidParameterDimensions(String),
+    InvalidParameterType(String),
+    InvalidEventLabel(String, String),
+    MissingEventTime(usize),
+    MissingEventLabel(usize),
+    NoParameterTimeEvents,
+    HeaderNotParsed,
+    AnalogBytesPerFrameMismatch,
+    FrameRateMismatch(f32, f32),
+    ScaleFactorMismatch(f32, f32),
 }
 
 impl Error for C3dParseError {}
 impl fmt::Display for C3dParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "C3dParseError: {:?}", self)
+    }
+}
+
+#[derive(Debug)]
+pub enum C3dIoError {
+    WriteError(PathBuf, std::io::Error),
+    InvalidFileExtension(String),
+    InvalidFilePath(PathBuf),
+    WriteHeaderError(std::io::Error),
+    WriteParametersError(std::io::Error),
+    WriteDataError(std::io::Error),
+    GroupNameTooLong(String),
+    GroupNameNotAscii(String),
+    GroupDescriptionTooLong(String),
+    ParameterNameTooLong(String),
+    ParameterNameNotAscii(String),
+    InvalidParameterDimensions(String),
+    ParameterDescriptionTooLong(String),
+    InvalidForcePlatformInfo(String),
+}
+
+impl Error for C3dIoError {}
+impl fmt::Display for C3dIoError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "C3dIoError: {:?}", self)
     }
 }
 
@@ -87,12 +136,14 @@ impl fmt::Display for C3dParseError {
 /// let c3d = C3d::load("tests/data/short.c3d");
 /// assert!(c3d.is_ok());
 /// ```
-#[derive(Debug, Default)]
 pub struct C3d {
-    pub file_path: Option<PathBuf>,
-    bytes: Bytes,
     pub parameters: Parameters,
     processor: Processor,
-    pub data: Data,
+    pub points: Points,
+    pub analog: Analog,
     pub events: Events,
+    pub manufacturer: Manufacturer,
+    pub seg: Seg,
+    pub forces: ForcePlatforms,
+    header_bytes: [u8; 512],
 }

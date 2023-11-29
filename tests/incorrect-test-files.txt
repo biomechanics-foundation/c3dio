@@ -1,0 +1,9 @@
+Incorrect files:
+Sample 28: type1.C3D - does not contain an ANALOG:RATE parameter
+Sample 31: large02.c3d - contains NaNs in point data
+Sample 24: MotionMonitorC3D.c3d - having a force plate defined without analog data should be fine, having incorrect number of ANALOG:USED is the problem
+Sample 11: evart.c3d - contains type 3 force plates but has force plate channels of 6 not 8
+Sample 12: c24089 13.c3d - contains NaNs in point data
+Sample 02: files do not contain consistent residuals or camera masks
+Sample 36: 72610framesf.c3d - does not contain 72610 frames
+Sample 36: 72610framesi.c3d - does not contain 72610 frames
