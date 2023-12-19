@@ -48,7 +48,10 @@ use processor::Processor;
 use seg::Seg;
 
 pub mod prelude {
-    pub use crate::{parameters::ParameterData, C3d, C3dIoError, C3dParseError};
+    pub use crate::{
+        parameters::{ParameterData, Parameters},
+        C3d, C3dIoError, C3dParseError,
+    };
 }
 
 /// Reports errors that occurred while parsing a C3D file.
