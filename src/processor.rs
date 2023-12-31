@@ -1,13 +1,21 @@
-//! Internal module for converting bytes to the correct format based on the processor type.
 use crate::C3dParseError;
 
+/// Processor type enum for determining endianess of the bytes during parsing and writing.
+/// Older C3D files may be stored in Dec or SgiMips format. Most modern C3D files are stored
+/// in Intel format. A parser that supports all three formats is required to read all C3D files.
+///
+/// c3dio supports reading and writing all three formats.
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub enum Processor {
+    /// Dec (Digital Equipment Corporation) is the default format for data created on a DEC computer.
+    /// Traditionally, this data was produced on a VAX or RSX-11M operating system.
     Dec,
-    Intel,
-    SgiMips,
+    /// Intel is the default format for data created on an Intel-based computer running Windows or Linux.
     #[default]
-    Unknown,
+    Intel,
+    /// SgiMips (Silicon Graphics MIPS) is the default format for data created on a Silicon Graphics RISC-based computer.
+    /// These systems are not in common use today.
+    SgiMips,
 }
 
 impl ToString for Processor {
@@ -16,12 +24,10 @@ impl ToString for Processor {
             Processor::Intel => "Intel",
             Processor::Dec => "DEC",
             Processor::SgiMips => "SGI MIPS",
-            Processor::Unknown => "Unknown",
         }
         .to_string()
     }
 }
-
 
 /// Processor is used to conveniently calculate the value of specific bytes
 /// based on the processor type. C3D files can be created on different
@@ -34,6 +40,13 @@ impl Processor {
     }
 
     /// Convenience function to create a Processor from the parameter start block.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the processor type is not valid. Acceptable values are:
+    /// 0x54 - Intel
+    /// 0x55 - Dec
+    /// 0x56 - SgiMips
     pub(crate) fn from_parameter_start_block(
         parameter_start_block: [u8; 512],
     ) -> Result<Processor, C3dParseError> {
@@ -51,7 +64,6 @@ impl Processor {
             Processor::Intel => intel_u16(bytes),
             Processor::Dec => dec_u16(bytes),
             Processor::SgiMips => sgi_mips_u16(bytes),
-            Processor::Unknown => 0,
         }
     }
 
@@ -61,7 +73,6 @@ impl Processor {
             Processor::Intel => intel_i16(bytes) as i16,
             Processor::Dec => dec_i16(bytes) as i16,
             Processor::SgiMips => sgi_mips_i16(bytes) as i16,
-            Processor::Unknown => 0,
         }
     }
 
@@ -71,7 +82,6 @@ impl Processor {
             Processor::Intel => intel_f32(bytes),
             Processor::Dec => dec_f32(bytes),
             Processor::SgiMips => sgi_mips_f32(bytes),
-            Processor::Unknown => 0.0,
         }
     }
 
@@ -81,7 +91,6 @@ impl Processor {
             Processor::Intel => value.to_le_bytes(),
             Processor::Dec => value.to_le_bytes(),
             Processor::SgiMips => value.to_be_bytes(),
-            Processor::Unknown => [0, 0],
         }
     }
 
@@ -90,7 +99,6 @@ impl Processor {
             Processor::Intel => value.to_le_bytes(),
             Processor::Dec => value.to_le_bytes(),
             Processor::SgiMips => value.to_be_bytes(),
-            Processor::Unknown => [0, 0],
         }
     }
 
@@ -107,7 +115,6 @@ impl Processor {
                 }
             }
             Processor::SgiMips => value.to_be_bytes(),
-            Processor::Unknown => [0, 0, 0, 0],
         }
     }
 }

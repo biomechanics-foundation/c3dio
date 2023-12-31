@@ -383,7 +383,6 @@ impl C3d {
             Processor::Intel => 0x54,
             Processor::Dec => 0x55,
             Processor::SgiMips => 0x56,
-            Processor::Unknown => 0x00,
         });
         let (group_bytes, group_names_to_ids) = self.parameters.write_groups(&self.processor)?;
         parameter_bytes.extend(group_bytes);
