@@ -1,6 +1,7 @@
+//! Includes event information from the C3D file header and parameter section.
 use crate::parameters::{Parameter, ParameterData, Parameters};
 use crate::processor::Processor;
-use crate::{C3dIoError, C3dParseError};
+use crate::{C3dWriteError, C3dParseError};
 use grid::Grid;
 use std::collections::HashMap;
 /// # Events
@@ -240,7 +241,7 @@ impl Events {
         &self,
         processor: &Processor,
         group_names_to_ids: &HashMap<String, usize>,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         bytes.extend(Parameter::integer(self.events.len() as i16).write(
             processor,

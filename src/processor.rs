@@ -1,7 +1,8 @@
+//! Internal module for converting bytes to the correct format based on the processor type.
 use crate::C3dParseError;
 
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
-pub(crate) struct Processor {
+pub struct Processor {
     pub processor_type: ProcessorType,
 }
 

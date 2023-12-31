@@ -1,7 +1,18 @@
-use crate::file_formats::Sto;
-use crate::{C3d, C3dIoError};
+use crate::{C3d, C3dWriteError};
 use std::io::Write;
 use std::path::PathBuf;
+use grid::Grid;
+
+#[derive(Debug, Clone)]
+pub struct Sto {
+    pub file_description: Option<String>,
+    pub version: u8,
+    pub in_degrees: bool,
+    pub first_frame: usize,
+    pub data_rate: f32,
+    pub column_names: Vec<String>,
+    pub data: Grid<f64>,
+}
 
 impl Sto {
     pub fn from_c3d(c3d: &C3d) -> Self {
@@ -16,9 +27,9 @@ impl Sto {
         }
     }
 
-    pub fn write(&self, file_name: PathBuf) -> Result<(), C3dIoError> {
+    pub fn write(&self, file_name: PathBuf) -> Result<(), C3dWriteError> {
         if file_name.is_dir() {
-            return Err(C3dIoError::InvalidFilePath(file_name));
+            return Err(C3dWriteError::InvalidFilePath(file_name));
         }
         if !file_name
             .extension()
@@ -28,12 +39,12 @@ impl Sto {
             .to_lowercase()
             .eq("sto")
         {
-            return Err(C3dIoError::InvalidFileExtension(
+            return Err(C3dWriteError::InvalidFileExtension(
                 file_name.extension().unwrap().to_str().unwrap().to_string(),
             ));
         }
         let mut file = std::fs::File::create(file_name.clone()).map_err(|e| {
-            C3dIoError::WriteError(
+            C3dWriteError::WriteError(
                 file_name.clone(),
                 std::io::Error::new(std::io::ErrorKind::Other, e),
             )
@@ -67,7 +78,7 @@ impl Sto {
         }
         header.push_str("\n");
         file.write_all(header.as_bytes()).map_err(|e| {
-            C3dIoError::WriteError(
+            C3dWriteError::WriteError(
                 file_name.clone(),
                 std::io::Error::new(std::io::ErrorKind::Other, e),
             )
@@ -83,7 +94,7 @@ impl Sto {
             }
             row_string.push_str("\n");
             file.write_all(row_string.as_bytes()).map_err(|e| {
-                C3dIoError::WriteError(
+                C3dWriteError::WriteError(
                     file_name.clone(),
                     std::io::Error::new(std::io::ErrorKind::Other, e),
                 )

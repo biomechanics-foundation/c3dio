@@ -1,3 +1,4 @@
+//! Structures to represent auxiliary data types that C3D files can be written to.
 use crate::data::MarkerPoint;
 use grid::Grid;
 use std::path::PathBuf;

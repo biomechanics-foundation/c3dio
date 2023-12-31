@@ -1,3 +1,4 @@
+//! Includes data structures and functions for parsing and storing data from a C3D file.
 use crate::C3dParseError;
 use std::ops::{Deref, DerefMut};
 
@@ -8,7 +9,7 @@ pub enum DataFormat {
     Integer,
 }
 
-pub fn get_point_bytes_per_frame(point_format: &DataFormat, points_per_frame: usize) -> usize {
+pub(crate) fn get_point_bytes_per_frame(point_format: &DataFormat, points_per_frame: usize) -> usize {
     let bytes_per_point = match point_format {
         DataFormat::Float => 16,
         DataFormat::Integer => 8,
@@ -17,7 +18,7 @@ pub fn get_point_bytes_per_frame(point_format: &DataFormat, points_per_frame: us
     (bytes_per_point * points_per_frame) as usize
 }
 
-pub fn get_analog_bytes_per_frame(
+pub(crate) fn get_analog_bytes_per_frame(
     point_format: &DataFormat,
     analog_samples_per_frame: u16,
 ) -> Result<usize, C3dParseError> {

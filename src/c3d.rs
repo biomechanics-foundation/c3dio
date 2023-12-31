@@ -1,3 +1,4 @@
+//! Includes the C3d struct implementation and high-level functions for reading and writing C3D files.
 use crate::analog::Analog;
 use crate::data::DataFormat;
 use crate::forces::ForcePlatforms;
@@ -8,13 +9,27 @@ use crate::seg::Seg;
 
 use crate::events::Events;
 use crate::processor::{Processor, ProcessorType};
-use crate::{C3d, C3dIoError, C3dParseError};
+use crate::{C3dWriteError, C3dParseError};
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use std::fmt::{Debug, Formatter};
+
+/// Represents a parsed C3D file.
+/// Each field contains the data from the corresponding section of the file.
+pub struct C3d {
+    pub parameters: Parameters,
+    processor: Processor,
+    pub points: Points,
+    pub analog: Analog,
+    pub events: Events,
+    pub manufacturer: Manufacturer,
+    pub seg: Seg,
+    pub forces: ForcePlatforms,
+    header_bytes: [u8; 512],
+}
 
 impl PartialEq for C3d {
     fn eq(&self, other: &Self) -> bool {
@@ -78,14 +93,14 @@ impl ToString for C3d {
 impl C3d {
     /// Parses a C3D file from a file path string.
     /// loading from a string is less inclusive than loading from a PathBuf
-    /// (https://users.rust-lang.org/t/pathbuf-and-path-why-not-string/28777)
+    /// <https://users.rust-lang.org/t/pathbuf-and-path-why-not-string/28777>
     pub fn load(file_name: &str) -> Result<C3d, C3dParseError> {
         C3d::load_path(PathBuf::from(file_name))
     }
 
     /// Parses a C3D file from a file path.
     /// PathBuf is more inclusive than String
-    /// (https://users.rust-lang.org/t/pathbuf-and-path-why-not-string/28777)
+    /// <https://users.rust-lang.org/t/pathbuf-and-path-why-not-string/28777>
     pub fn load_path(file_path: PathBuf) -> Result<C3d, C3dParseError> {
         let c3d = C3d::new();
         let (c3d, mut file) = c3d.open_file(file_path)?;
@@ -272,7 +287,7 @@ impl C3d {
     }
 
     /// A function to write a C3D header to bytes.
-    fn write_header(&self, data_start_block_index: u16) -> Result<[u8; 512], C3dIoError> {
+    fn write_header(&self, data_start_block_index: u16) -> Result<[u8; 512], C3dWriteError> {
         let mut header_bytes = [0u8; 512];
         header_bytes[0] = 2;
         header_bytes[1] = 80;
@@ -361,7 +376,7 @@ impl C3d {
         Ok(header_bytes)
     }
 
-    fn write_parameter_blocks(&self) -> Result<Vec<u8>, C3dIoError> {
+    fn write_parameter_blocks(&self) -> Result<Vec<u8>, C3dWriteError> {
         let mut parameter_bytes: Vec<u8> = Vec::new();
         parameter_bytes.append(vec![0, 0, 0].as_mut());
         parameter_bytes.push(match self.processor.processor_type {
@@ -406,7 +421,7 @@ impl C3d {
         Ok(parameter_bytes)
     }
 
-    fn write_data(&self) -> Result<Vec<u8>, C3dIoError> {
+    fn write_data(&self) -> Result<Vec<u8>, C3dWriteError> {
         let mut data_bytes = Vec::new();
         let num_frames = match self.points.rows() == 0
             && self.analog.rows() > 0
@@ -425,19 +440,20 @@ impl C3d {
         Ok(data_bytes)
     }
 
-    pub fn write(self, file_name: &str) -> Result<Self, C3dIoError> {
+    pub fn write(self, file_name: &str) -> Result<Self, C3dWriteError> {
         self.write_path(PathBuf::from(file_name))
     }
+
     /// A function to write a C3D file to a file path.
     /// This function will overwrite any existing file.
     /// If the file path does not exist, it will be created.
     /// If the file path is a directory, an error will be returned.
     /// If the file path is not writable, an error will be returned.
     /// If the file path is not a valid UTF-8 string, an error will be returned.
-    pub fn write_path(self, file_name: PathBuf) -> Result<Self, C3dIoError> {
+    pub fn write_path(self, file_name: PathBuf) -> Result<Self, C3dWriteError> {
         // Check if the file path is a directory.
         if file_name.is_dir() {
-            return Err(C3dIoError::InvalidFilePath(file_name));
+            return Err(C3dWriteError::InvalidFilePath(file_name));
         }
         // Check if file_name ends with ".c3d", ".C3D", ".c3D", or ".C3d".
         let extension = file_name
@@ -446,12 +462,12 @@ impl C3d {
             .to_string_lossy()
             .to_lowercase();
         if !extension.eq("c3d") {
-            return Err(C3dIoError::InvalidFileExtension(
+            return Err(C3dWriteError::InvalidFileExtension(
                 file_name.to_string_lossy().to_string(),
             ));
         }
         let mut file = File::create(file_name.clone())
-            .map_err(|e| C3dIoError::WriteError(file_name.clone(), e))?;
+            .map_err(|e| C3dWriteError::WriteError(file_name.clone(), e))?;
         let mut parameter_bytes = self.write_parameter_blocks()?;
         if parameter_bytes.len() % 512 != 0 {
             // add padding
@@ -463,13 +479,13 @@ impl C3d {
         let data_bytes = self.write_data()?;
 
         file.write_all(&header_bytes)
-            .map_err(|e| C3dIoError::WriteHeaderError(e))?;
+            .map_err(|e| C3dWriteError::WriteHeaderError(e))?;
         file.write_all(&parameter_bytes)
-            .map_err(|e| C3dIoError::WriteParametersError(e))?;
+            .map_err(|e| C3dWriteError::WriteParametersError(e))?;
         file.write_all(&data_bytes)
-            .map_err(|e| C3dIoError::WriteDataError(e))?;
+            .map_err(|e| C3dWriteError::WriteDataError(e))?;
         file.sync_all()
-            .map_err(|e| C3dIoError::WriteError(file_name.clone(), e))?;
+            .map_err(|e| C3dWriteError::WriteError(file_name.clone(), e))?;
         Ok(self)
     }
 }

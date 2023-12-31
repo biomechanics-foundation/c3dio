@@ -1,6 +1,8 @@
+//! Contains force platform information in the form of the `ForcePlatforms` struct.
+//! Includes the C3d struct implementation and high-level functions for reading and writing C3D files.
 use crate::parameters::{Parameter, ParameterData, Parameters};
 use crate::processor::Processor;
-use crate::{C3dIoError, C3dParseError};
+use crate::{C3dWriteError, C3dParseError};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::ops::{Index, IndexMut};
@@ -130,7 +132,7 @@ impl ForcePlatforms {
         &self,
         processor: &Processor,
         group_names_to_ids: &HashMap<String, usize>,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         // "FORCE_PLATFORM", "USED"
         bytes.extend(Parameter::integer(self.force_platforms.len() as i16).write(

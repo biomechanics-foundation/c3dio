@@ -1,5 +1,6 @@
+//! Logic for parsing and writing parameters.
 use crate::processor::Processor;
-use crate::{C3dIoError, C3dParseError};
+use crate::{C3dWriteError, C3dParseError};
 use grid::Grid;
 use std::collections::HashMap;
 
@@ -58,22 +59,22 @@ impl Parameters {
     pub(crate) fn write_groups(
         &self,
         processor: &Processor,
-    ) -> Result<(Vec<u8>, HashMap<String, usize>), C3dIoError> {
+    ) -> Result<(Vec<u8>, HashMap<String, usize>), C3dWriteError> {
         let mut bytes = Vec::new();
         let mut group_names_to_ids = HashMap::new();
         let mut group_id = 1;
         for (i, (group, (group_description, parameters))) in self.parameters.iter().enumerate() {
             if group.len() > 127 {
-                return Err(C3dIoError::GroupNameTooLong(group.clone()));
+                return Err(C3dWriteError::GroupNameTooLong(group.clone()));
             }
             bytes.push(group.len() as u8);
             bytes.push(-(group_id as i8) as u8);
             if !group.is_ascii() {
-                return Err(C3dIoError::GroupNameNotAscii(group.clone()));
+                return Err(C3dWriteError::GroupNameNotAscii(group.clone()));
             }
             bytes.extend(group.to_ascii_uppercase().as_bytes());
             if group_description.as_bytes().len() > 255 {
-                return Err(C3dIoError::GroupDescriptionTooLong(
+                return Err(C3dWriteError::GroupDescriptionTooLong(
                     group_description.clone(),
                 ));
             }
@@ -91,7 +92,7 @@ impl Parameters {
         &self,
         processor: &Processor,
         group_names_to_ids: &HashMap<String, usize>,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         for (i, (group, (_, parameters))) in self.parameters.iter().enumerate() {
             let group_id = group_names_to_ids.get(group).unwrap();
@@ -733,9 +734,9 @@ impl Parameter {
         }
     }
 
-    pub fn chars(data: Vec<char>) -> Result<Self, C3dIoError> {
+    pub fn chars(data: Vec<char>) -> Result<Self, C3dWriteError> {
         if data.len() == 0 {
-            return Err(C3dIoError::InvalidParameterDimensions(
+            return Err(C3dWriteError::InvalidParameterDimensions(
                 "chars".to_string(),
             ));
         }
@@ -747,9 +748,9 @@ impl Parameter {
         })
     }
 
-    pub fn string(data: String) -> Result<Parameter, C3dIoError> {
+    pub fn string(data: String) -> Result<Parameter, C3dWriteError> {
         if data.len() == 0 {
-            return Err(C3dIoError::InvalidParameterDimensions(
+            return Err(C3dWriteError::InvalidParameterDimensions(
                 "string".to_string(),
             ));
         }
@@ -757,9 +758,9 @@ impl Parameter {
         Parameter::chars(chars)
     }
 
-    pub fn integers(data: Vec<i16>) -> Result<Self, C3dIoError> {
+    pub fn integers(data: Vec<i16>) -> Result<Self, C3dWriteError> {
         if data.len() == 0 {
-            return Err(C3dIoError::InvalidParameterDimensions(
+            return Err(C3dWriteError::InvalidParameterDimensions(
                 "integers".to_string(),
             ));
         }
@@ -771,9 +772,9 @@ impl Parameter {
         })
     }
 
-    pub fn floats(data: Vec<f32>) -> Result<Parameter, C3dIoError> {
+    pub fn floats(data: Vec<f32>) -> Result<Parameter, C3dWriteError> {
         if data.len() == 0 {
-            return Err(C3dIoError::InvalidParameterDimensions(
+            return Err(C3dWriteError::InvalidParameterDimensions(
                 "floats".to_string(),
             ));
         }
@@ -846,15 +847,15 @@ impl Parameter {
         parameter_name: String,
         group_id: usize,
         last_parameter: bool,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         if parameter_name.len() > 127 {
-            return Err(C3dIoError::ParameterNameTooLong(parameter_name.clone()));
+            return Err(C3dWriteError::ParameterNameTooLong(parameter_name.clone()));
         }
         bytes.push(parameter_name.len() as u8);
         bytes.push(group_id.clone() as u8);
         if !parameter_name.is_ascii() {
-            return Err(C3dIoError::ParameterNameNotAscii(parameter_name.clone()));
+            return Err(C3dWriteError::ParameterNameNotAscii(parameter_name.clone()));
         }
         bytes.extend(parameter_name.to_ascii_uppercase().as_bytes());
         if last_parameter {
@@ -878,7 +879,7 @@ impl Parameter {
             }
             bytes_to_end += 1;
             if self.description.as_bytes().len() > 255 {
-                return Err(C3dIoError::ParameterDescriptionTooLong(
+                return Err(C3dWriteError::ParameterDescriptionTooLong(
                     parameter_name.clone(),
                 ));
             }
@@ -902,7 +903,7 @@ impl Parameter {
         bytes.push(self.dimensions.len() as u8);
         for dimension in &self.dimensions {
             if dimension > &255 {
-                return Err(C3dIoError::InvalidParameterDimensions(
+                return Err(C3dWriteError::InvalidParameterDimensions(
                     parameter_name.clone(),
                 ));
             }

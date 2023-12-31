@@ -1,10 +1,11 @@
+//! Includes the analog data and parameters.
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
 use crate::data::{get_analog_bytes_per_frame, get_point_bytes_per_frame, DataFormat};
 use crate::parameters::{Parameter, ParameterData, Parameters};
 use crate::processor::Processor;
-use crate::{C3dIoError, C3dParseError};
+use crate::{C3dWriteError, C3dParseError};
 use grid::Grid;
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -83,8 +84,6 @@ pub struct Analog {
 
 impl PartialEq for Analog {
     fn eq(&self, other: &Self) -> bool {
-        dbg!(&self.analog.size());
-        dbg!(&other.analog.size());
         self.parsed_header == other.parsed_header
             && self.analog.flatten() == other.analog.flatten()
             && self.labels == other.labels
@@ -191,7 +190,7 @@ impl Analog {
         &self,
         processor: &Processor,
         group_names_to_ids: &HashMap<String, usize>,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         // "ANALOG", "USED"
         bytes.extend(Parameter::integer(self.analog.cols() as i16).write(
@@ -409,9 +408,6 @@ impl Analog {
         points_per_frame: usize,
         analog_used: u16,
     ) -> Result<&mut Self, C3dParseError> {
-        dbg!(num_frames);
-        dbg!(self.samples_per_channel_per_frame);
-        dbg!(analog_used);
         let mut analog_data = Grid::new(
             num_frames * self.samples_per_channel_per_frame as usize,
             analog_used as usize,

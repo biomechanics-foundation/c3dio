@@ -1,6 +1,7 @@
+//! Contains manufacturer data from the parameter section of a C3D file, if provided.
 use crate::parameters::{Parameter, ParameterData, Parameters};
 use crate::processor::Processor;
-use crate::{C3dIoError, C3dParseError};
+use crate::{C3dWriteError, C3dParseError};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,7 +82,7 @@ impl Manufacturer {
         &self,
         processor: &Processor,
         group_names_to_ids: &HashMap<String, usize>,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         if let Some(company) = &self.company {
             bytes.extend(Parameter::chars(company.chars().collect())?.write(

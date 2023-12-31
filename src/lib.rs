@@ -38,19 +38,36 @@ pub mod seg;
 #[path = "file_formats/mod.rs"]
 pub mod file_formats;
 
-use analog::Analog;
-use events::Events;
-use forces::ForcePlatforms;
-use manufacturer::Manufacturer;
-use parameters::{Parameter, Parameters};
-use points::Points;
-use processor::Processor;
-use seg::Seg;
+pub use analog::Analog;
+pub use analog::AnalogFormat;
+pub use analog::AnalogOffset;
+pub use c3d::C3d;
+pub use data::DataFormat;
+pub use data::MarkerPoint;
+pub use events::Event;
+pub use events::EventContext;
+pub use events::Events;
+pub use forces::ForcePlatform;
+pub use forces::ForcePlatformCorners;
+pub use forces::ForcePlatformOrigin;
+pub use forces::ForcePlatformType;
+pub use forces::ForcePlatforms;
+pub use manufacturer::Manufacturer;
+pub use manufacturer::ManufacturerVersion;
+pub use parameters::{Parameter, ParameterData, Parameters};
+pub use points::Points;
+pub use processor::Processor;
+pub use processor::ProcessorType;
+pub use seg::Seg;
+pub use file_formats::trc::Trc;
+pub use file_formats::sto::Sto;
 
+/// Contains the most commonly used types and functions from this crate.
 pub mod prelude {
     pub use crate::{
-        parameters::{ParameterData, Parameters},
-        C3d, C3dIoError, C3dParseError,
+        Analog, AnalogFormat, AnalogOffset, C3d, C3dParseError, C3dWriteError, Events,
+        ForcePlatform, ForcePlatformType, ForcePlatforms, Manufacturer, ManufacturerVersion,
+        MarkerPoint, Parameter, ParameterData, Parameters, Points, Processor, ProcessorType, Seg, Sto, Trc
     };
 }
 
@@ -103,8 +120,10 @@ impl fmt::Display for C3dParseError {
     }
 }
 
+/// Reports errors that occurred while writing a C3D file.
+/// The error type is returned by the `write` method.
 #[derive(Debug)]
-pub enum C3dIoError {
+pub enum C3dWriteError {
     WriteError(PathBuf, std::io::Error),
     InvalidFileExtension(String),
     InvalidFilePath(PathBuf),
@@ -121,32 +140,9 @@ pub enum C3dIoError {
     InvalidForcePlatformInfo(String),
 }
 
-impl Error for C3dIoError {}
-impl fmt::Display for C3dIoError {
+impl Error for C3dWriteError {}
+impl fmt::Display for C3dWriteError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "C3dIoError: {:?}", self)
+        write!(f, "C3dWriteError: {:?}", self)
     }
-}
-
-/// Represents a parsed C3D file.
-/// The file can be read from disk or from memory.
-///
-/// # Examples
-///
-/// ```
-/// use c3dio::prelude::*;
-///
-/// let c3d = C3d::load("tests/data/short.c3d");
-/// assert!(c3d.is_ok());
-/// ```
-pub struct C3d {
-    pub parameters: Parameters,
-    processor: Processor,
-    pub points: Points,
-    pub analog: Analog,
-    pub events: Events,
-    pub manufacturer: Manufacturer,
-    pub seg: Seg,
-    pub forces: ForcePlatforms,
-    header_bytes: [u8; 512],
 }

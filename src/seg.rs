@@ -1,6 +1,7 @@
+//! Structure for storing SEG parameters.
 use crate::parameters::{Parameter, Parameters};
 use crate::processor::Processor;
-use crate::{C3dParseError, C3dIoError};
+use crate::{C3dParseError, C3dWriteError};
 use grid::Grid;
 use std::collections::HashMap;
 
@@ -110,7 +111,7 @@ impl Seg {
         &self,
         processor: &Processor,
         group_names_to_ids: &HashMap<String, usize>,
-    ) -> Result<Vec<u8>, C3dIoError> {
+    ) -> Result<Vec<u8>, C3dWriteError> {
         let mut bytes = Vec::new();
         if self.marker_diameter.is_some() {
             bytes.extend(Parameter::float(self.marker_diameter.unwrap()).write(

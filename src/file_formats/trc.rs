@@ -1,9 +1,24 @@
-use crate::file_formats::Trc;
 use crate::C3d;
-use crate::C3dIoError;
+use crate::C3dWriteError;
 use std::io::Write;
 use std::path::PathBuf;
 
+use crate::data::MarkerPoint;
+use grid::Grid;
+
+#[derive(Debug, Clone)]
+pub struct Trc {
+    pub path_file_type: u8,
+    pub path_file_type_description: String,
+    pub file_name: Option<PathBuf>,
+    pub data_rate: f32,
+    pub camera_rate: f32,
+    pub num_frames: usize,
+    pub units: [char; 4],
+    pub marker_names: Vec<String>,
+    pub first_frame: usize,
+    pub data: Grid<MarkerPoint>,
+}
 impl Trc {
     pub fn from_c3d(c3d: &C3d) -> Self {
         let path_file_type = 4;
@@ -33,9 +48,9 @@ impl Trc {
         }
     }
 
-    pub fn write(&self, file_name: PathBuf) -> Result<(), C3dIoError> {
+    pub fn write(&self, file_name: PathBuf) -> Result<(), C3dWriteError> {
         if file_name.is_dir() {
-            return Err(C3dIoError::InvalidFilePath(file_name));
+            return Err(C3dWriteError::InvalidFilePath(file_name));
         }
         if !file_name
             .extension()
@@ -45,12 +60,12 @@ impl Trc {
             .to_lowercase()
             .eq("trc")
         {
-            return Err(C3dIoError::InvalidFileExtension(
+            return Err(C3dWriteError::InvalidFileExtension(
                 file_name.extension().unwrap().to_str().unwrap().to_string(),
             ));
         }
         let mut file = std::fs::File::create(file_name.clone()).map_err(|e| {
-            C3dIoError::WriteError(
+            C3dWriteError::WriteError(
                 file_name.clone(),
                 std::io::Error::new(std::io::ErrorKind::Other, e),
             )
@@ -89,7 +104,7 @@ impl Trc {
         }
         header.push_str("\n\n");
         file.write_all(header.as_bytes()).map_err(|e| {
-            C3dIoError::WriteError(
+            C3dWriteError::WriteError(
                 file_name.clone(),
                 std::io::Error::new(std::io::ErrorKind::Other, e),
             )
@@ -111,7 +126,7 @@ impl Trc {
             }
             line.push_str("\n");
             file.write_all(line.as_bytes()).map_err(|e| {
-                C3dIoError::WriteError(
+                C3dWriteError::WriteError(
                     file_name.clone(),
                     std::io::Error::new(std::io::ErrorKind::Other, e),
                 )
