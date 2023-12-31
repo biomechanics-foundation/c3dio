@@ -1,31 +1,27 @@
 //! Internal module for converting bytes to the correct format based on the processor type.
 use crate::C3dParseError;
 
-#[derive(Debug, Copy, Clone, Default, PartialEq)]
-pub struct Processor {
-    pub processor_type: ProcessorType,
-}
-
-impl ToString for Processor {
-    fn to_string(&self) -> String {
-        match self.processor_type {
-            ProcessorType::Intel => "Intel",
-            ProcessorType::Dec => "DEC",
-            ProcessorType::SgiMips => "SGI MIPS",
-            ProcessorType::Unknown => "Unknown",
-        }
-        .to_string()
-    }
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub enum ProcessorType {
+pub enum Processor {
     Dec,
     Intel,
     SgiMips,
     #[default]
     Unknown,
 }
+
+impl ToString for Processor {
+    fn to_string(&self) -> String {
+        match self {
+            Processor::Intel => "Intel",
+            Processor::Dec => "DEC",
+            Processor::SgiMips => "SGI MIPS",
+            Processor::Unknown => "Unknown",
+        }
+        .to_string()
+    }
+}
+
 
 /// Processor is used to conveniently calculate the value of specific bytes
 /// based on the processor type. C3D files can be created on different
@@ -41,69 +37,68 @@ impl Processor {
     pub(crate) fn from_parameter_start_block(
         parameter_start_block: [u8; 512],
     ) -> Result<Processor, C3dParseError> {
-        let processor_type = match parameter_start_block[3] {
-            0x54 => Ok(ProcessorType::Intel),
-            0x55 => Ok(ProcessorType::Dec),
-            0x56 => Ok(ProcessorType::SgiMips),
+        match parameter_start_block[3] {
+            0x54 => Ok(Processor::Intel),
+            0x55 => Ok(Processor::Dec),
+            0x56 => Ok(Processor::SgiMips),
             _ => Err(C3dParseError::InvalidProcessorType),
-        }?;
-        Ok(Processor { processor_type })
+        }
     }
 
     /// Calculates the u16 value from the bytes based on the processor type.
     pub(crate) fn u16(self, bytes: [u8; 2]) -> u16 {
-        match self.processor_type {
-            ProcessorType::Intel => intel_u16(bytes),
-            ProcessorType::Dec => dec_u16(bytes),
-            ProcessorType::SgiMips => sgi_mips_u16(bytes),
-            ProcessorType::Unknown => 0,
+        match self {
+            Processor::Intel => intel_u16(bytes),
+            Processor::Dec => dec_u16(bytes),
+            Processor::SgiMips => sgi_mips_u16(bytes),
+            Processor::Unknown => 0,
         }
     }
 
     /// Calculates the i16 value from the bytes based on the processor type.
     pub(crate) fn i16(self, bytes: [u8; 2]) -> i16 {
-        match self.processor_type {
-            ProcessorType::Intel => intel_i16(bytes) as i16,
-            ProcessorType::Dec => dec_i16(bytes) as i16,
-            ProcessorType::SgiMips => sgi_mips_i16(bytes) as i16,
-            ProcessorType::Unknown => 0,
+        match self {
+            Processor::Intel => intel_i16(bytes) as i16,
+            Processor::Dec => dec_i16(bytes) as i16,
+            Processor::SgiMips => sgi_mips_i16(bytes) as i16,
+            Processor::Unknown => 0,
         }
     }
 
     /// Calculates the f32 value from the bytes based on the processor type.
     pub(crate) fn f32(self, bytes: [u8; 4]) -> f32 {
-        match self.processor_type {
-            ProcessorType::Intel => intel_f32(bytes),
-            ProcessorType::Dec => dec_f32(bytes),
-            ProcessorType::SgiMips => sgi_mips_f32(bytes),
-            ProcessorType::Unknown => 0.0,
+        match self {
+            Processor::Intel => intel_f32(bytes),
+            Processor::Dec => dec_f32(bytes),
+            Processor::SgiMips => sgi_mips_f32(bytes),
+            Processor::Unknown => 0.0,
         }
     }
 
     /// Calculates the bytes from the u16 value based on the processor type.
     pub(crate) fn u16_to_bytes(self, value: u16) -> [u8; 2] {
-        match self.processor_type {
-            ProcessorType::Intel => value.to_le_bytes(),
-            ProcessorType::Dec => value.to_le_bytes(),
-            ProcessorType::SgiMips => value.to_be_bytes(),
-            ProcessorType::Unknown => [0, 0],
+        match self {
+            Processor::Intel => value.to_le_bytes(),
+            Processor::Dec => value.to_le_bytes(),
+            Processor::SgiMips => value.to_be_bytes(),
+            Processor::Unknown => [0, 0],
         }
     }
 
     pub(crate) fn i16_to_bytes(self, value: i16) -> [u8; 2] {
-        match self.processor_type {
-            ProcessorType::Intel => value.to_le_bytes(),
-            ProcessorType::Dec => value.to_le_bytes(),
-            ProcessorType::SgiMips => value.to_be_bytes(),
-            ProcessorType::Unknown => [0, 0],
+        match self {
+            Processor::Intel => value.to_le_bytes(),
+            Processor::Dec => value.to_le_bytes(),
+            Processor::SgiMips => value.to_be_bytes(),
+            Processor::Unknown => [0, 0],
         }
     }
 
     /// Calculates the bytes from the f32 value based on the processor type.
     pub(crate) fn f32_to_bytes(self, value: f32) -> [u8; 4] {
-        match self.processor_type {
-            ProcessorType::Intel => value.to_le_bytes(),
-            ProcessorType::Dec => {
+        match self {
+            Processor::Intel => value.to_le_bytes(),
+            Processor::Dec => {
                 let temp = value.to_le_bytes();
                 if temp[3] == 255 {
                     [temp[2], temp[3], temp[0], temp[1]]
@@ -111,8 +106,8 @@ impl Processor {
                     [temp[2], temp[3] + 1, temp[0], temp[1]]
                 }
             }
-            ProcessorType::SgiMips => value.to_be_bytes(),
-            ProcessorType::Unknown => [0, 0, 0, 0],
+            Processor::SgiMips => value.to_be_bytes(),
+            Processor::Unknown => [0, 0, 0, 0],
         }
     }
 }

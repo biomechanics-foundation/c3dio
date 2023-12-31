@@ -8,8 +8,8 @@ use crate::points::Points;
 use crate::seg::Seg;
 
 use crate::events::Events;
-use crate::processor::{Processor, ProcessorType};
-use crate::{C3dWriteError, C3dParseError};
+use crate::processor::Processor;
+use crate::{C3dParseError, C3dWriteError};
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -379,11 +379,11 @@ impl C3d {
     fn write_parameter_blocks(&self) -> Result<Vec<u8>, C3dWriteError> {
         let mut parameter_bytes: Vec<u8> = Vec::new();
         parameter_bytes.append(vec![0, 0, 0].as_mut());
-        parameter_bytes.push(match self.processor.processor_type {
-            ProcessorType::Intel => 0x54,
-            ProcessorType::Dec => 0x55,
-            ProcessorType::SgiMips => 0x56,
-            ProcessorType::Unknown => 0x00,
+        parameter_bytes.push(match self.processor {
+            Processor::Intel => 0x54,
+            Processor::Dec => 0x55,
+            Processor::SgiMips => 0x56,
+            Processor::Unknown => 0x00,
         });
         let (group_bytes, group_names_to_ids) = self.parameters.write_groups(&self.processor)?;
         parameter_bytes.extend(group_bytes);

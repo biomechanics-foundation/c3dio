@@ -51,30 +51,6 @@ impl DerefMut for MarkerPoint {
     }
 }
 
-//impl Index<usize> for MarkerPoint {
-//    type Output = f32;
-//
-//    fn index(&self, index: usize) -> &Self::Output {
-//        match index {
-//            0 => &self.x,
-//            1 => &self.y,
-//            2 => &self.z,
-//            _ => panic!("Index out of bounds"),
-//        }
-//    }
-//}
-//
-//impl IndexMut<usize> for MarkerPoint {
-//    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-//        match index {
-//            0 => &mut self.x,
-//            1 => &mut self.y,
-//            2 => &mut self.z,
-//            _ => panic!("Index out of bounds"),
-//        }
-//    }
-//}
-
 impl MarkerPoint {
     pub fn new(x: f32, y: f32, z: f32) -> Self {
         Self {

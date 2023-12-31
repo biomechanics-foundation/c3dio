@@ -57,7 +57,6 @@ pub use manufacturer::ManufacturerVersion;
 pub use parameters::{Parameter, ParameterData, Parameters};
 pub use points::Points;
 pub use processor::Processor;
-pub use processor::ProcessorType;
 pub use seg::Seg;
 pub use file_formats::trc::Trc;
 pub use file_formats::sto::Sto;
@@ -67,7 +66,7 @@ pub mod prelude {
     pub use crate::{
         Analog, AnalogFormat, AnalogOffset, C3d, C3dParseError, C3dWriteError, Events,
         ForcePlatform, ForcePlatformType, ForcePlatforms, Manufacturer, ManufacturerVersion,
-        MarkerPoint, Parameter, ParameterData, Parameters, Points, Processor, ProcessorType, Seg, Sto, Trc
+        MarkerPoint, Parameter, ParameterData, Parameters, Points, Processor, Seg, Sto, Trc
     };
 }
 
