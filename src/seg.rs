@@ -5,13 +5,33 @@ use crate::{C3dParseError, C3dWriteError};
 use grid::Grid;
 use std::collections::HashMap;
 
+/// Common in older C3D files, this parameter section is used to store
+/// parameters related to how the raw data was processed.
+/// Although this section is not required, it is recommended to include
+/// since it provides useful information about the data if any issues
+/// need to be resolved related to collection or processing.
 #[derive(Debug, Clone, Default)]
 pub struct Seg {
+    /// The diameter of the marker in millimeters. It is good practice to
+    /// use the same diameter for all markers in a collection.
     pub marker_diameter: Option<f32>,
+    /// A 3x2 grid of floats that defines the minimum and maximum values for each
+    /// of the three dimensions of the marker data.
+    // TODO: This should be a 3x2 grid of floats, or even better a custom type
     pub data_limits: Option<Grid<f32>>,
+    /// A float that defines the acceleration factor used in the calculation of
+    /// a new segment. For gait analysis, this value is typically 50mm/sec^2.
     pub acc_factor: Option<f32>,
+    /// A float that defines the noise factor used in the calculation of a new
+    /// segment. For gait analysis, this value is typically 10mm.
     pub noise_factor: Option<f32>,
+    /// A float that defines the residual error factor related to the
+    /// inclusion of rays during marker reconstruction. For gait analysis,
+    /// a value of 2.0 or 3.0 is typically used.
     pub residual_error_factor: Option<f32>,
+    /// A float that defines the intersection limit used in the calculation
+    /// of ray intersections. For gait analysis, this value is typically
+    /// 0.7mm or less.
     pub intersection_limit: Option<f32>,
 }
 
@@ -107,6 +127,7 @@ impl Seg {
         })
     }
 
+    /// writes the SEG parameters to a byte vector
     pub(crate) fn write(
         &self,
         processor: &Processor,
