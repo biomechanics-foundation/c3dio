@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use crate::data::{get_analog_bytes_per_frame, get_point_bytes_per_frame, DataFormat};
 use crate::parameters::{Parameter, ParameterData, Parameters};
 use crate::processor::Processor;
-use crate::{C3dWriteError, C3dParseError};
+use crate::{C3dParseError, C3dWriteError};
 use grid::Grid;
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -16,12 +16,14 @@ pub enum AnalogFormat {
 }
 
 impl AnalogFormat {
-    pub(crate) fn from_parameters(parameters: &Parameters) -> Result<AnalogFormat, C3dParseError> {
-        let analog_format_parameter_data = parameters.get("ANALOG", "FORMAT");
+    pub(crate) fn from_parameters(
+        parameters: &mut Parameters,
+    ) -> Result<AnalogFormat, C3dParseError> {
+        let analog_format_parameter_data = parameters.remove("ANALOG", "FORMAT");
         match analog_format_parameter_data {
             Some(analog_format_parameter_data) => {
                 let analog_format_parameter_data: String =
-                    analog_format_parameter_data.try_into()?;
+                    analog_format_parameter_data.as_ref().try_into()?;
                 match analog_format_parameter_data.as_str() {
                     "SIGNED" => Ok(AnalogFormat::Signed),
                     "UNSIGNED" => Ok(AnalogFormat::Unsigned),
