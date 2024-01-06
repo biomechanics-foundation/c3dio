@@ -8,6 +8,7 @@ use crate::processor::Processor;
 use crate::{C3dParseError, C3dWriteError};
 use grid::Grid;
 
+/// Analog format describes whether the analog data is signed or unsigned.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum AnalogFormat {
     #[default]
@@ -35,6 +36,7 @@ impl AnalogFormat {
     }
 }
 
+/// An offset that is subtracted from the analog data before scaling.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AnalogOffset {
     Signed(Vec<i16>),
@@ -68,9 +70,11 @@ impl AnalogOffset {
     }
 }
 
+/// Analog data and parameters are stored as a struct.
+/// Definitions for data and parameters are from the C3D file format documentation.
 #[derive(Debug, Clone)]
 pub struct Analog {
-    pub parsed_header: bool,
+    parsed_header: bool,
     pub analog: Grid<f64>,
     pub labels: Vec<String>,
     pub descriptions: Vec<String>,

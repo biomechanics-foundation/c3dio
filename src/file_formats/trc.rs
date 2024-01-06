@@ -1,3 +1,5 @@
+//! TRC file format is a Motion Analysis Corporation file format for storing 3D marker data.
+//! It is also used by OpenSim to store marker data.
 use crate::C3d;
 use crate::C3dWriteError;
 use std::io::Write;
@@ -6,6 +8,7 @@ use std::path::PathBuf;
 use crate::data::MarkerPoint;
 use grid::Grid;
 
+/// The TRC struct contains the data for writing a TRC file.
 #[derive(Debug, Clone)]
 pub struct Trc {
     pub path_file_type: u8,

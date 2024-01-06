@@ -1,8 +1,11 @@
+//! STO file formats are used by OpenSim to store table-based data such as joint angles, muscle activations, and muscle forces.
+//! They can be used to store ground reaction forces/moments and emg data as well.
 use crate::{C3d, C3dWriteError};
 use std::io::Write;
 use std::path::PathBuf;
 use grid::Grid;
 
+/// The STO struct contains the data for writing an STO file.
 #[derive(Debug, Clone)]
 pub struct Sto {
     pub file_description: Option<String>,

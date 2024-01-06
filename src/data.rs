@@ -2,6 +2,9 @@
 use crate::C3dParseError;
 use std::ops::{Deref, DerefMut};
 
+/// DataFormat is the format of the data in the file.
+/// Floating point data is larger than integer data, but the loss of precision
+/// in integer data may be acceptable for some applications.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum DataFormat {
     #[default]
@@ -30,6 +33,9 @@ pub(crate) fn get_analog_bytes_per_frame(
     Ok(bytes_per_analog_point * analog_samples_per_frame as usize)
 }
 
+/// MarkerPoint contains both the points and residuals for a marker.
+/// The residuals are the average distance between the marker and the reconstructed point.
+/// Cameras is a bitfield of which cameras saw the marker.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct MarkerPoint {
     pub point: [f32; 3],
@@ -72,6 +78,7 @@ impl MarkerPoint {
         *self
     }
 
+    /// used for writing to file
     pub(crate) fn cameras_as_byte(&self) -> u8 {
         let mut cameras_byte = 0;
         for (i, camera) in self.cameras.iter().enumerate() {
