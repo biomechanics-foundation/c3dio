@@ -14,26 +14,17 @@
 use std::path::PathBuf;
 use std::{error::Error, fmt};
 
-#[path = "analog.rs"]
 pub mod analog;
-#[path = "c3d.rs"]
 pub mod c3d;
-#[path = "data.rs"]
 pub mod data;
-#[path = "events.rs"]
 pub mod events;
-#[path = "forces.rs"]
 pub mod forces;
-#[path = "manufacturer.rs"]
 pub mod manufacturer;
-#[path = "parameters.rs"]
 pub mod parameters;
-#[path = "points.rs"]
 pub mod points;
-#[path = "processor.rs"]
 mod processor;
-#[path = "seg.rs"]
 pub mod seg;
+pub mod builder;
 
 #[path = "file_formats/mod.rs"]
 pub mod file_formats;
@@ -41,6 +32,7 @@ pub mod file_formats;
 pub use analog::Analog;
 pub use analog::AnalogFormat;
 pub use analog::AnalogOffset;
+pub use builder::C3dBuilder;
 pub use c3d::C3d;
 pub use data::DataFormat;
 pub use data::MarkerPoint;
