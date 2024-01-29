@@ -157,9 +157,6 @@ fn intel_f32(bytes: [u8; 4]) -> f32 {
 /// Conversion of the raw bytes into dec f32 format based on the following:
 /// https://stackoverflow.com/questions/64760137/how-to-display-dec-floating-point-format-given-32-bits-in-ieee-standard
 fn dec_f32(bytes: [u8; 4]) -> f32 {
-    if bytes.len() != 4 {
-        return 0.0;
-    }
     if bytes[1] == 0x00 {
         let bytes = [bytes[2], bytes[3], bytes[0], bytes[1]];
         f32::from_le_bytes(bytes)
