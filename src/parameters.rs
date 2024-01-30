@@ -1,6 +1,6 @@
 //! Logic for parsing and writing parameters.
 use crate::processor::Processor;
-use crate::{C3dWriteError, C3dParseError};
+use crate::{C3dParseError, C3dWriteError};
 use grid::Grid;
 use std::collections::HashMap;
 
@@ -216,30 +216,31 @@ impl Parameters {
 
 impl PartialEq for Parameters {
     fn eq(&self, other: &Self) -> bool {
-        //if self.parameters.len() != other.parameters.len() {
-        //    return false;
-        //}
-        //for (group, (group_description, parameters)) in self.parameters.iter() {
-        //    if !other.parameters.contains_key(group) {
-        //        return false;
-        //    }
-        //    let other_group = other.parameters.get(group).unwrap();
-        //    if group_description != &other_group.0 {
-        //        return false;
-        //    }
-        //    if parameters.len() != other_group.1.len() {
-        //        return false;
-        //    }
-        //    for (parameter_name, parameter) in parameters.iter() {
-        //        if !other_group.1.contains_key(parameter_name) {
-        //            return false;
-        //        }
-        //        let other_parameter = other_group.1.get(parameter_name).unwrap();
-        //        if parameter != other_parameter {
-        //            return false;
-        //        }
-        //    }
-        //}
+        if self.parameters.len() != other.parameters.len() {
+            return false;
+        }
+        for (group, (group_description, parameters)) in self.parameters.iter() {
+            if !other.parameters.contains_key(group) {
+                dbg!(group);
+                return false;
+            }
+            let other_group = other.parameters.get(group).unwrap();
+            if group_description != &other_group.0 {
+                return false;
+            }
+            if parameters.len() != other_group.1.len() {
+                return false;
+            }
+            for (parameter_name, parameter) in parameters.iter() {
+                if !other_group.1.contains_key(parameter_name) {
+                    return false;
+                }
+                let other_parameter = other_group.1.get(parameter_name).unwrap();
+                if parameter != other_parameter {
+                    return false;
+                }
+            }
+        }
         true
     }
 }
