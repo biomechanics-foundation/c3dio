@@ -1,13 +1,13 @@
 [package]
 name = "c3dio"
-version = "0.6.1"
+version = "0.7.0"
 authors = ["Claire V. Hammond <me@cvhammond.com>"]
 edition = "2021"
 categories = ["science", "simulation", "parser-implementations", "game-development", "science::robotics"]
 description = "A library for reading and writing C3D motion capture files."
 license = "MIT OR Apache-2.0"
 homepage = "https://chiron.rs/c3dio"
-repository = "https://github.com/cvhammond/c3dio"
+repository = "https://github.com/biomechanics-foundation/c3dio"
 readme = "README.md"
 keywords = ["c3d", "parser", "motion-capture", "mocap", "biomechanics"]
 exclude = ["tests", "tests/*", "examples", "examples/*"]
