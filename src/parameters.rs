@@ -63,7 +63,7 @@ impl Parameters {
         let mut bytes = Vec::new();
         let mut group_names_to_ids = HashMap::new();
         let mut group_id = 1;
-        for (i, (group, (group_description, parameters))) in self.parameters.iter().enumerate() {
+        for (group, (group_description, _parameters)) in self.parameters.iter() {
             if group.len() > 127 {
                 return Err(C3dWriteError::GroupNameTooLong(group.clone()));
             }
