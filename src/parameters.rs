@@ -221,7 +221,6 @@ impl PartialEq for Parameters {
         }
         for (group, (group_description, parameters)) in self.parameters.iter() {
             if !other.parameters.contains_key(group) {
-                dbg!(group);
                 return false;
             }
             let other_group = other.parameters.get(group).unwrap();
@@ -1133,7 +1132,7 @@ fn parse_description(
         Ok(utf) => Ok(utf),
         //Err(_) => Err(C3dParseError::InvalidDescription),
         Err(_) => {
-            Ok(" ".to_string()) // some files have invalid descriptions
+            Ok("".to_string()) // some files have invalid descriptions
         }
     }
 }

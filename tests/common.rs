@@ -33,7 +33,8 @@ pub fn assert_read_write(path: &str) {
     let temp_dir = TestFiles::new();
     temp_dir.file(path, " ");
     let temp_path = temp_dir.path().join(path).to_str().unwrap().to_string();
-    let c3d1 = C3d::load(path).unwrap().write(&temp_path).unwrap();
+    let c3d1 = C3d::load(path).unwrap();
+    let c3d1 = c3d1.write(&temp_path).unwrap();
     let c3d2 = C3d::load(&temp_path).unwrap();
-    assert_eq!(c3d1, c3d2);
+    assert_eq!(c3d1, &c3d2);
 }

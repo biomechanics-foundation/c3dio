@@ -7,5 +7,5 @@ fn main() {
 
     let c3d = c3d.write("examples/short-copy.c3d").unwrap();
     let c3d2 = C3d::load("examples/short-copy.c3d").unwrap();
-    assert_eq!(c3d, c3d2);
+    assert_eq!(c3d, &c3d2);
 }

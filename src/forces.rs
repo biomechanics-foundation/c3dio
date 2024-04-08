@@ -2,7 +2,7 @@
 //! Includes the C3d struct implementation and high-level functions for reading and writing C3D files.
 use crate::parameters::{Parameter, ParameterData, Parameters};
 use crate::processor::Processor;
-use crate::{C3dWriteError, C3dParseError};
+use crate::{C3dParseError, C3dWriteError};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::ops::{Index, IndexMut};
@@ -305,7 +305,11 @@ impl ForcePlatforms {
             Some(
                 self.force_platforms[force_platform]
                     .plate_type
-                    .center_of_pressure_from_analog(analog),
+                    .center_of_pressure_from_analog(
+                        analog,
+                        self.force_platforms[force_platform].origin.clone(),
+                        self.force_platforms[force_platform].corners.clone(),
+                    ),
             )
         } else {
             None
@@ -372,28 +376,28 @@ impl ForcePlatformType {
         }
     }
 
-    fn center_of_pressure_from_analog(&self, analog: [f32; 8]) -> [f32; 2] {
+    fn center_of_pressure_from_analog(
+        &self,
+        analog: [f32; 8],
+        origin: ForcePlatformOrigin,
+        corners: ForcePlatformCorners,
+    ) -> [f32; 2] {
         match self {
             ForcePlatformType::Type1 => [analog[3], analog[4]],
             ForcePlatformType::Type3 => {
                 [(analog[0] + analog[1]) / 2., (analog[2] + analog[3]) / 2.]
             }
             _ => {
-                let force_vector = [analog[0], analog[1], analog[2]];
-                let moment_vector = [analog[3], analog[4], analog[5]];
-                let center_of_pressure = cross_product(&force_vector, &moment_vector);
-                [center_of_pressure[0], center_of_pressure[1]]
+                let origin = origin.origin;
+                let height = corners[0][2] - origin[2];
+                let x = (-height * analog[0] - analog[4]) / analog[2];
+                let y = (-height * analog[1] - analog[3]) / analog[2];
+                let x = -x;
+                let y = -y;
+                [x, y]
             }
         }
     }
-}
-
-fn cross_product(a: &[f32; 3], b: &[f32; 3]) -> [f32; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

@@ -154,13 +154,17 @@ impl C3d {
         let mut analog = [0f32; 8];
         for i in 0..8 {
             let channel_index = channels[i];
-            if self.analog.rows() <= channel_index as usize
-                || self.analog.cols() <= frame * self.analog.samples_per_channel_per_frame as usize
+            if channel_index == 0 {
+                analog[i] = 0.0;
+                continue;
+            }
+            if self.analog.cols() <= (channel_index - 1) as usize
+                || self.analog.rows() <= frame * self.analog.samples_per_channel_per_frame as usize
             {
                 return None;
             }
             analog[i] = self.analog[frame * self.analog.samples_per_channel_per_frame as usize]
-                [channel_index as usize] as f32;
+                [(channel_index - 1) as usize] as f32;
         }
         Some(analog)
     }
@@ -439,7 +443,7 @@ impl C3d {
         Ok(data_bytes)
     }
 
-    pub fn write(self, file_name: &str) -> Result<Self, C3dWriteError> {
+    pub fn write(&self, file_name: &str) -> Result<&Self, C3dWriteError> {
         self.write_path(PathBuf::from(file_name))
     }
 
@@ -449,7 +453,7 @@ impl C3d {
     /// If the file path is a directory, an error will be returned.
     /// If the file path is not writable, an error will be returned.
     /// If the file path is not a valid UTF-8 string, an error will be returned.
-    pub fn write_path(self, file_name: PathBuf) -> Result<Self, C3dWriteError> {
+    pub fn write_path(&self, file_name: PathBuf) -> Result<&Self, C3dWriteError> {
         // Check if the file path is a directory.
         if file_name.is_dir() {
             return Err(C3dWriteError::InvalidFilePath(file_name));
