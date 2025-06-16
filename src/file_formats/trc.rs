@@ -120,12 +120,16 @@ impl Trc {
                 (i + self.first_frame) as f32 / self.data_rate
             ));
             for j in 0..self.marker_names.len() {
-                line.push_str(&format!(
-                    "{}\t{}\t{}\t",
-                    self.data[(i, j)][0],
-                    self.data[(i, j)][1],
-                    self.data[(i, j)][2]
-                ));
+                if self.data[(i, j)].residual < 0.0 {
+                    line.push_str("\t\t\t");
+                } else {
+                    line.push_str(&format!(
+                        "{}\t{}\t{}\t",
+                        self.data[(i, j)][0],
+                        self.data[(i, j)][1],
+                        self.data[(i, j)][2]
+                    ));
+                }
             }
             line.push_str("\n");
             file.write_all(line.as_bytes()).map_err(|e| {
